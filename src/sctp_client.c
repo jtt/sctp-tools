@@ -141,7 +141,7 @@ static int do_client( struct client_ctx *ctx )
         if ( ! is_flag( ctx->options, SEQ_FLAG ) ) {
                 ret = connect( ctx->sock, (struct sockaddr *)&(ctx->host), addrlen );
                 if ( ret < 0 ) {
-                        WARN("Connect() failed: %s \n", strerror(errno));
+                        print_error("Unable to connect()", errno);
                         return -1;
                 }
         }
@@ -150,6 +150,7 @@ static int do_client( struct client_ctx *ctx )
         fd = open( ctx->filename, O_RDONLY);
         if ( fd < 0 ) {
                 WARN("Can't open file %s : %s \n",ctx->filename, strerror(errno));
+                print_error("Unable to open file", errno);
                 return -1;
         }
 
@@ -159,13 +160,15 @@ static int do_client( struct client_ctx *ctx )
 
                 ret = read( fd, chunk, ctx->chunk_size );
                 if ( ret < 0 ) {
-                        WARN(" read() failed: %s \n", strerror(errno));
+                        print_error("Unable to read data to send", errno);
+                        break;
                 }
 
                 DBG("Sending %d bytes \n", ret );
                 if ( is_flag( ctx->options, VERBOSE_FLAG ) ) {
                         xdump_data( stdout, chunk, ret, "Data to send");
                 }
+                printf("Sending chunk %d/%d \n", (i+1), ctx->chunk_count);
 
                 if ( is_flag( ctx->options, SEQ_FLAG ) )
                         ret = sendit_seq( ctx->sock, ctx->ppid, ctx->streamno, 
@@ -175,7 +178,8 @@ static int do_client( struct client_ctx *ctx )
                         ret = send( ctx->sock, chunk, ret, 0 );
 
                 if ( ret < 0 ) {
-                        WARN("send() failed: %s \n", strerror(errno));
+                        print_error("Unable to send data", errno);
+                        break;
                 }
                 if ( is_flag( ctx->options, ECHO_FLAG ) ) {
                         if ( is_flag( ctx->options, SEQ_FLAG )) {
@@ -193,8 +197,10 @@ static int do_client( struct client_ctx *ctx )
                         }
                         if ( recv_len < 0 ) {
                                 WARN("Error while receiving data\n");
+                                print_error("Unable to read received data", errno);
+                                break;
                         } else if ( recv_len == 0 ) {
-                                WARN("Timed out while waiting for echo\n");
+                                printf("Timed out while waiting for echo\n");
                         } else {
                                 printf("Received %d bytes of possible echo\n", recv_len);
                         }

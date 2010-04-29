@@ -88,7 +88,6 @@ struct server_ctx {
         
 };
 
-
 /**
  * Bind to requested port and set the socket to listen for incoming
  * connections.
@@ -109,12 +108,12 @@ int bind_and_listen( struct server_ctx *ctx )
 
         memcpy( &ss.sin6_addr, &in6addr_any, sizeof(struct in6_addr));
         if ( bind(ctx->sock, (struct sockaddr *)&ss, sizeof( struct sockaddr_in6)) < 0 ) {
-                ERROR( "Unable to bind() : %s \n", strerror(errno));
+                print_error( "Unable to bind()", errno );
                 return -1;
         }
 
         if ( listen( ctx->sock, DEFAULT_BACKLOG ) < 0 ) {
-                ERROR(" Unable to listen() : %s \n", strerror(errno));
+                print_error(" Unable to listen()", errno );
                 return -1;
         }
 
@@ -160,14 +159,14 @@ int do_accept( struct server_ctx *ctx, struct sockaddr_storage *remote_ss,
                                 if ( errno == EINTR ) 
                                         continue; /* likely we are closing */
 
-                                fprintf(stderr, "Error in accept() : %s \n", strerror(errno));
+                                print_error( "Error in accept()", errno);
                                 return -1;
                         }
                 } else if ( ret < 0 ) {
                         if ( errno == EINTR ) 
                                 continue;
 
-                        fprintf( stderr, "Error in select() : %s \n", strerror(errno));
+                        print_error( "Error in select()", errno);
                         return -1;
                 }
         }
@@ -198,7 +197,7 @@ int do_server( struct server_ctx *ctx, int client_fd )
                         if ( errno == EINTR )
                                 continue;
 
-                        ERROR("Error in recv_wait() : %s \n", strerror(errno));
+                        print_error("Unable to receive data", errno );
                         return -1;
                 } else if ( recv_count == -2 ) {
                         printf("Connection closed by the remote host\n");
@@ -251,7 +250,7 @@ int do_server_seq( struct server_ctx *ctx )
                         if ( errno == EINTR )
                                 continue;
 
-                        ERROR("Error in recv_wait() : %s \n", strerror( errno ));
+                        print_error("Unable to read data", errno);
                         return -1;
                 } else if ( ret == -2 )  {
                         printf("Connection closed by remote host\n" );
@@ -494,13 +493,3 @@ int main( int argc, char *argv[] )
 
         return EXIT_SUCCESS;
 }
-
-
-
-
-
-
-
-
-
-

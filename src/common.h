@@ -47,4 +47,5 @@ int sendit_seq( int sock, uint16_t ppid, uint16_t streamno,
                 uint8_t *chunk, int chunk_size );
 int recv_wait( int sock, time_t timeout_ms, uint8_t *chunk, size_t chunk_len,
                 struct sockaddr *peer, socklen_t *peerlen, struct sctp_sndrcvinfo *info );
+void print_error( const char *msg, int num );
 #endif /* _COMMON_H_ */

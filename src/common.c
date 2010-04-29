@@ -261,4 +261,20 @@ int recv_wait( int sock, time_t timeout_ms, uint8_t *chunk, size_t chunk_len,
 
         return ret;
 }
+/**
+ * Print error message to user.
+ *
+ * If DEBUG is defined use the debug macros, on non-debug, print
+ * error message to stderr.
+ * @param msg The message to print
+ * @param num errno for the failed operation
+ */
+void print_error( const char *msg, int num )
+{
+#ifdef DEBUG
+        ERROR("%s : %s\n", msg, strerror(num));
+#else
+        fprintf(stderr,"ERROR %s : %s \n",msg, strerror(num));
+#endif /* DEBUG */
+}
 
