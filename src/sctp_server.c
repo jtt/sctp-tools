@@ -64,6 +64,11 @@
 #define VERBOSE_FLAG 0x01
 #define SEQPKT_FLAG 0x01 <<1 
 #define ECHO_FLAG 0x01 <<2
+/**
+ * Number of milliseconds to wait on select() before checking if user has
+ * requested stop.
+ */
+#define ACCEPT_TIMEOUT_MS 100
 
 
 /**
@@ -84,6 +89,14 @@ struct server_ctx {
 };
 
 
+/**
+ * Bind to requested port and set the socket to listen for incoming
+ * connections.
+ * The port is read from the main context.
+ *
+ * @param ctx Pointer to the main context.
+ * @return -1 if operation failed, 0 on success.
+ */
 int bind_and_listen( struct server_ctx *ctx )
 {
         struct sockaddr_in6 ss;
@@ -108,8 +121,18 @@ int bind_and_listen( struct server_ctx *ctx )
         return 0;
 }
 
-#define ACCEPT_TIMEOUT_MS 100
 
+/**
+ * Wait for incoming connection.
+ *
+ * Returns either when a connection from remote server accepted or if stop_req
+ * is set to 1.
+ *
+ * @param ctx Pointer to main context.
+ * @param remote_ss Address of the remote host is saved here.
+ * @param addrlen Pointer to variable where lenght of remote host data is saved.
+ * @return -1 on error, the fd for accepted connection on success.
+ */
 int do_accept( struct server_ctx *ctx, struct sockaddr_storage *remote_ss, 
                 socklen_t *addrlen )
 {
@@ -151,6 +174,16 @@ int do_accept( struct server_ctx *ctx, struct sockaddr_storage *remote_ss,
         return cli_fd;
 }
 
+/**
+ * Server loop when STREAM socket is used. 
+ *
+ * Wait for incoming data from remote peer and if echo mode is on, echo it
+ * back.
+ * 
+ * @param ctx Pointer to main context.
+ * @param client_fd Socket to read the data from. 
+ * @return -1 if error occurs, 0 on success.
+ */
 int do_server( struct server_ctx *ctx, int client_fd )
 {
         int recv_count = 1;
@@ -184,6 +217,15 @@ int do_server( struct server_ctx *ctx, int client_fd )
         return 0;
 }
 
+/**
+ * Server loop when SEQPKT socket is used. 
+ *
+ * Wait for incoming data from remote peer and if echo mode is on, echo it
+ * back.
+ * 
+ * @param ctx Pointer to main context.
+ * @return -1 if error occurs, 0 on success.
+ */
 int do_server_seq( struct server_ctx *ctx ) 
 {
         struct sockaddr_storage peer_ss;
@@ -256,6 +298,10 @@ int do_server_seq( struct server_ctx *ctx )
 }
 
 
+/**
+ * Signal handler for handling user pressing ctrl+c.
+ * @param sig Signal received.
+ */
 void sighandler( int sig )
 {
         DBG("Received signal %d \n", sig );

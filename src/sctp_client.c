@@ -66,18 +66,45 @@
  */
 #define SEQ_FLAG 0x01 << 2
 
+/**
+ * Flag indicating ECHO mode.
+ */
 #define ECHO_FLAG 0x01 << 3
 
+/**
+ * Maximum lenght for the file where to read the data.
+ */
 #define FILENAME_LEN 120
+/**
+ * Where to read the data by default.
+ */
 #define DEFAULT_FILENAME "/dev/urandom"
 
+/**
+ * Default value for PPID if seqpkt socket is used.
+ */
 #define DEFAULT_PPID 0
+/**
+ * Default value for stream ID if seqpkt socket is used.
+ */
 #define DEFAULT_STREAM_NO 0
 
+/**
+ * Number of milliseconds to wait for reply in echo mode.
+ */
 #define ECHO_WAIT_MS 500
+/**
+ * Default size for chunk to send.
+ */
+#define DEFAULT_CHUNK_SIZE 120
+/**
+ * Default number of packets to send.
+ */
+#define DEFAULT_COUNT 5
 
-
-
+/**
+ * Main context for the client.
+ */
 struct client_ctx {
         int sock; /**< Socket to use for sending */
         struct sockaddr_storage host; /**< Remote host address */
@@ -86,14 +113,18 @@ struct client_ctx {
         uint16_t chunk_count;/**< Number of writes to do */
         flags_t options; /**< Runtime options */
         char filename[FILENAME_LEN]; /**< File to read data from */
-        uint16_t ppid;
-        uint16_t streamno;
+        uint16_t ppid; /**< PPID to set to the packet. */
+        uint16_t streamno; /**< Stream id to set to the packet. */
 };
 
-
-#define DEFAULT_CHUNK_SIZE 120
-#define DEFAULT_COUNT 5
-
+/**
+ * Do the client operation. 
+ *
+ * Send the required data and, if in echo mode, wait for reply packets.
+ *
+ * @param ctx Pointer to the main client context.
+ * @return -1 on error, 0 on success.
+ */
 static int do_client( struct client_ctx *ctx )
 {
         socklen_t addrlen;
@@ -185,6 +216,9 @@ static int do_client( struct client_ctx *ctx )
         return 0;
 }
 
+/**
+ * Print help for command line options.
+ */
 static void print_usage()
 {
         printf("sctp_cli v%s\n", PROG_VERSION);
@@ -209,6 +243,15 @@ static void print_usage()
         printf("\t--help            : Print this message \n");
 }
 
+/**
+ * Parse arguments and set the main context values accordingly.
+ *
+ * @param argc argument count.
+ * @param argv arguments
+ * @param ctx Pointer the the main client context.
+ * @return -1 if invalid parameters were given or if mandatory parameter is
+ * missing.
+ */
 static int parse_args( int argc, char **argv, struct client_ctx *ctx )
 {
         int c, option_index;
