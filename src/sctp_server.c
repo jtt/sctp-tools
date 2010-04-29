@@ -85,7 +85,6 @@ struct server_ctx {
         uint8_t *recvbuf; /**< Buffer where data is received */
         uint16_t recvbuf_size; /**< Number of bytes of data on buffer */
         flags_t options;/**< Operation flags */
-        
 };
 
 /**
@@ -186,6 +185,7 @@ int do_accept( struct server_ctx *ctx, struct sockaddr_storage *remote_ss,
 int do_server( struct server_ctx *ctx, int client_fd )
 {
         int recv_count = 1;
+        int total_count = 0;
 
         while ( ! close_req ) {
 
@@ -200,11 +200,17 @@ int do_server( struct server_ctx *ctx, int client_fd )
                         print_error("Unable to receive data", errno );
                         return -1;
                 } else if ( recv_count == -2 ) {
-                        printf("Connection closed by the remote host\n");
+                        printf("Connection closed by the remote host");
+                        printf(" (received %d bytes of data)\n",total_count);
                         return 0;
                 } else if ( recv_count > 0 )  {
                         DBG("Received %d bvtes \n", recv_count );
-                        xdump_data( stdout, ctx->recvbuf, recv_count, "Received data");
+                        total_count += recv_count;
+
+                        if ( is_flag( ctx->options, VERBOSE_FLAG ))
+                                xdump_data( stdout, ctx->recvbuf, 
+                                        recv_count, "Received data");
+
                         if ( is_flag( ctx->options, ECHO_FLAG ) ) {
                                 DBG("Echoing data back\n");
                                 if ( send( client_fd, ctx->recvbuf, recv_count, 0 ) < 0 ) {
@@ -278,10 +284,9 @@ int do_server_seq( struct server_ctx *ctx )
                                 if ( info.sinfo_flags & SCTP_UNORDERED ) 
                                   printf("un");
                                 printf("ordered]\n");
-
+                                xdump_data( stdout, ctx->recvbuf, ret, "Received data" );
                                   
                         }
-                        xdump_data( stdout, ctx->recvbuf, ret, "Received data" );
                         if ( is_flag( ctx->options, ECHO_FLAG ) ) {
                                 DBG("Echoing data back\n");
                                 if ( sendit_seq( ctx->sock, info.sinfo_ppid, info.sinfo_stream,
@@ -457,6 +462,7 @@ int main( int argc, char *argv[] )
         TRACE("Allocating %d bytes for recv buffer \n", ctx.recvbuf_size );
         ctx.recvbuf = mem_alloc( ctx.recvbuf_size * sizeof( uint8_t ));
 
+        printf("Listening on port %d \n", ctx.port );
         while ( !close_req ) {
                 if ( is_flag( ctx.options, SEQPKT_FLAG ) ) {
                         if ( do_server_seq( &ctx ) < 0 ) 
