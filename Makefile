@@ -2,7 +2,9 @@
 
 CC	= gcc
 CFLAGS	= -Wall -Wextra -Wshadow -g -std=gnu99
+ifneq ($(FREEBSD),1)
 LFLAGS	= -lsctp
+endif
 
 
 COMMON_OBJS	= debug.o common.o
