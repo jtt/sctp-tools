@@ -1,0 +1,27 @@
+
+ABOUT
+
+sctp-tools contains a simple SCTP server and SCTP client program which can be
+used to send data using SCTP protocol. The programs can be used to transfer
+data using both SEQPKT or STREAM type of SCTP sockets. 
+
+LICENSING
+
+The programs are licensed under two-clause BSD license.
+
+BUILDING and INSTALLING
+
+Edit the Makefile if necessary, type 'make' to compile the programs.
+
+If you want to enable the debug information, edit src/defs.h and remove
+comments around #define DEBUG. Then rebuild the application. If built with
+debugging enabled, the program will write debug information to stderr.
+
+RUNNING 
+
+Both programs have '--help' option which should provide some information on the
+available command line parameters.
+
+CONTACT
+
+Send all bug reports, improvement ideas and such to jtaimisto@gmail.com.
