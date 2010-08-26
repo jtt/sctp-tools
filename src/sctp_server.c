@@ -85,6 +85,7 @@ struct server_ctx {
         uint8_t *recvbuf; /**< Buffer where data is received */
         uint16_t recvbuf_size; /**< Number of bytes of data on buffer */
         flags_t options;/**< Operation flags */
+        struct sctp_initmsg *initmsg; /**< association parameters, if set */
 };
 
 /**
@@ -327,13 +328,15 @@ static void print_usage()
         printf("\t--seq          : use SOCK_SEQPACKET socket instead of SOCK_STREAM\n");
         printf("\t--echo         : Echo the received data back to sender\n");
         printf("\t--verbose      : Be more verbosive \n");
+        printf("\t--instreams       : Maximum number of input streams to negotiate for the association\n");
+        printf("\t--outstreams      : Number of output streams to negotiate\n");
         printf("\t--help         : Print this message \n");
 }  
 
 static int parse_args( int argc, char **argv, struct server_ctx *ctx )
 {
         int c, option_index;
-
+        uint16_t streams;
         struct option long_options[] = {
                 { "port", 1, 0, 'p' },
                 { "help", 0,0, 'H' },
@@ -341,12 +344,14 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
                 { "seq", 0,0,'s' },
                 { "echo",0,0,'e' },
                 { "verbose", 0,0,'v'},
+                { "instreams", 1,0, 'I' },
+                { "outstreams", 1,0,'O' },
                 { 0,0,0,0 }
         };
 
         while (1) {
 
-                c = getopt_long( argc, argv, "p:b:Hsev", long_options, &option_index );
+                c = getopt_long( argc, argv, "p:b:HsevI:O:", long_options, &option_index );
                 if ( c == -1 )
                         break;
 
@@ -371,6 +376,28 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
                                 break;
                         case 'v' :
                                 ctx->options = set_flag( ctx->options, VERBOSE_FLAG );
+                                break;
+                        case 'I' :
+                                if (parse_uint16(optarg, &streams) < 0 ) {
+                                        fprintf(stderr, "Invalid input stream count given\n");
+                                        return -1;
+                                }
+                                if (ctx->initmsg == NULL ) {
+                                        ctx->initmsg = mem_alloc( sizeof(struct sctp_initmsg));
+                                        memset( ctx->initmsg, 0, sizeof(struct sctp_initmsg));
+                                }
+                                ctx->initmsg->sinit_max_instreams = streams;
+                                break;
+                        case 'O' :
+                                if (parse_uint16(optarg, &streams) < 0 ) {
+                                        fprintf(stderr,"Invalid output stream count given\n");
+                                        return -1;
+                                }
+                                if (ctx->initmsg == NULL) {
+                                        ctx->initmsg = mem_alloc(sizeof(*ctx->initmsg));
+                                        memset( ctx->initmsg,0,sizeof(*ctx->initmsg));
+                                }
+                                ctx->initmsg->sinit_num_ostreams = streams;
                                 break;
                         case 'H' :
                         default :
@@ -436,6 +463,17 @@ int main( int argc, char *argv[] )
                 fprintf(stderr, "Unable to create socket: %s \n", strerror(errno));
                 return EXIT_FAILURE;
         }
+        if (ctx.initmsg != NULL ) {
+                TRACE("Requesting for %d output streams and at max %d input streams\n",
+                                ctx.initmsg->sinit_num_ostreams,
+                                ctx.initmsg->sinit_max_instreams);
+                if (setsockopt( ctx.sock, SOL_SCTP, SCTP_INITMSG, 
+                                        ctx.initmsg, sizeof(*ctx.initmsg)) < 0) {
+                        fprintf(stderr,"Warning: unable to set the association parameters: %s\n",
+                                        strerror(errno));
+                }
+        }
+
 
         if ( bind_and_listen( &ctx ) < 0 ) {
                 fprintf(stderr, "Error while initializing the server\n" );
@@ -495,6 +533,9 @@ int main( int argc, char *argv[] )
                 }
         }
         mem_free( ctx.recvbuf);
+        if (ctx.initmsg != NULL ) {
+                mem_free( ctx.initmsg);
+        }
         close( ctx.sock );
 
         return EXIT_SUCCESS;

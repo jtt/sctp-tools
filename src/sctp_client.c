@@ -115,6 +115,7 @@ struct client_ctx {
         char filename[FILENAME_LEN]; /**< File to read data from */
         uint16_t ppid; /**< PPID to set to the packet. */
         uint16_t streamno; /**< Stream id to set to the packet. */
+        struct sctp_initmsg *initmsg; /**< association parameters, if set */
 };
 
 /**
@@ -246,6 +247,8 @@ static void print_usage()
         printf("\t--streamid <s>    : Send data to stream with id <d>, default is %d\n",
                         DEFAULT_STREAM_NO);
         printf("\t--echo            : Expect the server to echo sent data back\n");
+        printf("\t--instreams       : Maximum number of input streams to negotiate for the association\n");
+        printf("\t--outstreams      : Number of output streams to negotiate\n");
         printf("\t--help            : Print this message \n");
 }
 
@@ -260,6 +263,7 @@ static void print_usage()
  */
 static int parse_args( int argc, char **argv, struct client_ctx *ctx )
 {
+        uint16_t streams;
         int c, option_index;
         int got_port = 0, got_addr = 0;
         struct option long_options[] = {
@@ -275,12 +279,14 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                 { "ppid", 1,0, 'P' },
                 { "streamid", 1, 0, 'T' },
                 { "echo", 0,0,'e' },
+                { "instreams", 1,0, 'I' },
+                { "outstreams", 1,0,'O' },
                 { 0,0,0,0 }
         };
 
         while( 1 ) {
 
-                c = getopt_long(argc, argv, "p:h:c:s:Hef:", long_options, &option_index);
+                c = getopt_long(argc, argv, "p:h:c:s:Hef:I:O:", long_options, &option_index);
                 if ( c == -1 ) 
                         break;
 
@@ -338,6 +344,28 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                 break;
                         case 'v' :
                                 ctx->options = set_flag( ctx->options, VERBOSE_FLAG);
+                                break;
+                        case 'I' :
+                                if (parse_uint16(optarg, &streams) < 0 ) {
+                                        fprintf(stderr, "Invalid input stream count given\n");
+                                        return -1;
+                                }
+                                if (ctx->initmsg == NULL ) {
+                                        ctx->initmsg = mem_alloc( sizeof(struct sctp_initmsg));
+                                        memset( ctx->initmsg, 0, sizeof(struct sctp_initmsg));
+                                }
+                                ctx->initmsg->sinit_max_instreams = streams;
+                                break;
+                        case 'O' :
+                                if (parse_uint16(optarg, &streams) < 0 ) {
+                                        fprintf(stderr,"Invalid output stream count given\n");
+                                        return -1;
+                                }
+                                if (ctx->initmsg == NULL) {
+                                        ctx->initmsg = mem_alloc(sizeof(*ctx->initmsg));
+                                        memset( ctx->initmsg,0,sizeof(*ctx->initmsg));
+                                }
+                                ctx->initmsg->sinit_num_ostreams = streams;
                                 break;
                         case 'H' :
                         default :
@@ -410,7 +438,20 @@ int main( int argc, char *argv[] )
                 return EXIT_FAILURE;
         }
 
+        if (ctx.initmsg != NULL ) {
+                TRACE("Requesting for %d output streams and at max %d input streams\n",
+                                ctx.initmsg->sinit_num_ostreams,
+                                ctx.initmsg->sinit_max_instreams);
+                if (setsockopt( ctx.sock, SOL_SCTP, SCTP_INITMSG, 
+                                        ctx.initmsg, sizeof(*ctx.initmsg)) < 0) {
+                        fprintf(stderr,"Warning: unable to set the association parameters: %s\n",
+                                        strerror(errno));
+                }
+        }
         do_client( &ctx );
+        if ( ctx.initmsg != NULL ) {
+                mem_free(ctx.initmsg);
+        }
         return EXIT_SUCCESS;
 }
 
