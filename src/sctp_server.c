@@ -70,6 +70,14 @@
  */
 #define ACCEPT_TIMEOUT_MS 100
 
+#ifdef FREEBSD
+/* FreeBSD setsockopt() wants the protocol number as the 'level'
+ * parameter, Linux uses SOL_SCTP, we'll define that here for
+ * FreeBSD
+ */
+#define SOL_SCTP 132
+#endif /* FREEBSD */
+
 
 /**
  * Indication that user has requested close

@@ -2,7 +2,9 @@
 
 CC	= gcc
 CFLAGS	= -Wall -Wextra -Wshadow -g -std=gnu99
-ifneq ($(FREEBSD),1)
+ifeq ($(FREEBSD),1)
+CFLAGS += -DFREEBSD
+else
 LFLAGS	= -lsctp
 endif
 
