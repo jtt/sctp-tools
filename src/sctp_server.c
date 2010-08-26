@@ -200,7 +200,7 @@ int do_server( struct server_ctx *ctx, int client_fd )
 
                 recv_count = recv_wait( client_fd, ACCEPT_TIMEOUT_MS,
                                 ctx->recvbuf, ctx->recvbuf_size, 
-                                NULL, NULL, NULL );
+                                NULL, NULL, NULL, NULL  );
                 
                 if ( recv_count == -1 ) {
                         if ( errno == EINTR )
@@ -245,7 +245,7 @@ int do_server_seq( struct server_ctx *ctx )
         struct sockaddr_storage peer_ss;
         socklen_t peerlen;
         struct sctp_sndrcvinfo info;
-        int ret;
+        int ret,flags;
         char peername[INET6_ADDRSTRLEN];
         void *ptr;
         uint16_t port;
@@ -256,11 +256,12 @@ int do_server_seq( struct server_ctx *ctx )
                 memset( &peer_ss, 0, sizeof( peer_ss ));
                 memset( &info, 0, sizeof( peer_ss ));
                 peerlen = sizeof( struct sockaddr_in6);
+                flags = 0;
 
                 ret = recv_wait( ctx->sock, ACCEPT_TIMEOUT_MS,
                                 ctx->recvbuf, ctx->recvbuf_size, 
                                 (struct sockaddr *)&peer_ss, &peerlen,
-                                &info );
+                                &info, &flags );
                 if ( ret == -1 ) {
                         if ( errno == EINTR )
                                 continue;
@@ -283,7 +284,12 @@ int do_server_seq( struct server_ctx *ctx )
                         } else {
                                 printf("Packet from unknown");
                         }
-                        printf(" with %d bytes of data\n", ret);
+                        printf(" with %d bytes of data", ret);
+                        if ( !(flags & MSG_EOR) ) {
+                                printf(" (partial data)");
+                        }
+                        printf("\n");
+
                         if ( is_flag( ctx->options, VERBOSE_FLAG ) ) {
                                 printf("\t stream: %d ppid: %d context: %d\n", info.sinfo_stream, 
                                                 info.sinfo_ppid, info.sinfo_context );

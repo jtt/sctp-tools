@@ -218,12 +218,14 @@ int sendit_seq( int sock, uint16_t ppid, uint16_t streamno,
  * @param peer  Sockaddr where the peers address is to be set.
  * @param peerlen Size of the address structure.
  * @param info  Pointer for the structure where the additional SCTP information is to be saved.
+ * @param flags Pointer where the receiving flags should be written.
  * 
  * @return  Number of bytes read on success, 0 on timeout and -1 on error, -2 if the 
  * remote end has shut down.
  */
 int recv_wait( int sock, time_t timeout_ms, uint8_t *chunk, size_t chunk_len,
-                struct sockaddr *peer, socklen_t *peerlen, struct sctp_sndrcvinfo *info )
+                struct sockaddr *peer, socklen_t *peerlen,
+                struct sctp_sndrcvinfo *info, int *flags )
 {
         fd_set fds;
         struct timeval tv;
@@ -246,7 +248,7 @@ int recv_wait( int sock, time_t timeout_ms, uint8_t *chunk, size_t chunk_len,
                 if ( peer != NULL ) {
 
                         ret = sctp_recvmsg( sock, chunk, chunk_len, 
-                                        peer, peerlen, info, 0 );
+                                        peer, peerlen, info, flags );
                 } else {
                         ret = recv( sock, chunk, chunk_len, 0 );
                 }

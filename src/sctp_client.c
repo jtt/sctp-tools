@@ -199,11 +199,11 @@ static int do_client( struct client_ctx *ctx )
                                         recv_len = recv_wait( ctx->sock, 
                                                 ECHO_WAIT_MS, chunk, ctx->chunk_size, 
                                                 (struct sockaddr *)&peer, &peer_len,
-                                                NULL );
+                                                NULL,NULL );
                         } else {
                                         recv_len = recv_wait( ctx->sock, 
                                                 ECHO_WAIT_MS, chunk, ctx->chunk_size, 
-                                                NULL, NULL, NULL );
+                                                NULL, NULL, NULL, NULL );
                         }
                         if ( recv_len < 0 ) {
                                 WARN("Error while receiving data\n");
