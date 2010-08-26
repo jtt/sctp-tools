@@ -195,12 +195,14 @@ int do_server( struct server_ctx *ctx, int client_fd )
 {
         int recv_count = 1;
         int total_count = 0;
+        int flags;
 
         while ( ! close_req ) {
 
+                flags = 0;
                 recv_count = recv_wait( client_fd, ACCEPT_TIMEOUT_MS,
                                 ctx->recvbuf, ctx->recvbuf_size, 
-                                NULL, NULL, NULL, NULL  );
+                                NULL, NULL, NULL, &flags  );
                 
                 if ( recv_count == -1 ) {
                         if ( errno == EINTR )
@@ -213,7 +215,12 @@ int do_server( struct server_ctx *ctx, int client_fd )
                         printf(" (received %d bytes of data)\n",total_count);
                         return 0;
                 } else if ( recv_count > 0 )  {
-                        DBG("Received %d bvtes \n", recv_count );
+                        printf("Received %d bytes", recv_count );
+                        if ( !(flags & MSG_EOR) ) {
+                                printf(" (partial)");
+                        }
+                        printf("\n");
+
                         total_count += recv_count;
 
                         if ( is_flag( ctx->options, VERBOSE_FLAG ))

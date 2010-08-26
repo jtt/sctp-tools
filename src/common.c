@@ -245,19 +245,18 @@ int recv_wait( int sock, time_t timeout_ms, uint8_t *chunk, size_t chunk_len,
                 if ( ! FD_ISSET( sock, &fds ) ) 
                         return -1; /* should not happen */
 
-                if ( peer != NULL ) {
-
-                        ret = sctp_recvmsg( sock, chunk, chunk_len, 
-                                        peer, peerlen, info, flags );
-                } else {
-                        ret = recv( sock, chunk, chunk_len, 0 );
-                }
+                ret = sctp_recvmsg( sock, chunk, chunk_len, 
+                                peer, peerlen, info, flags );
 
                 TRACE("Received %d bytes of chunk (size %d ) \n", ret, chunk_len );
-                if ( ret < 0 )
-                        ret = -1;
-                else if ( ret == 0 )
+                if ( ret < 0 ) {
+                        if ( errno == ECONNRESET ) 
+                                ret = -2;
+                        else
+                                ret = -1;
+                } else if ( ret == 0 ){
                         ret = -2;
+                }
 
         }
 
