@@ -92,6 +92,9 @@ struct server_ctx {
         uint16_t port; /**< Port we are listening on */
         uint8_t *recvbuf; /**< Buffer where data is received */
         uint16_t recvbuf_size; /**< Number of bytes of data on buffer */
+        uint8_t *partial; /**< Buffer user to collect partial data */
+        size_t partial_len; /**< Number of bytes of partial data on partial buffer */
+        size_t partial_size; /**< Capacity of partial buffer */
         flags_t options;/**< Operation flags */
         struct sctp_initmsg *initmsg; /**< association parameters, if set */
 };
@@ -182,6 +185,55 @@ int do_accept( struct server_ctx *ctx, struct sockaddr_storage *remote_ss,
 }
 
 /**
+ * Save received data to the partial datagram storage. 
+ *
+ * @param ctx Pointer to server context
+ * @param len Number of bytes of data there is available at ctx->recvbuf
+ */
+static void collect_partial( struct server_ctx *ctx, int len)
+{
+        int remaining;
+
+        if ( ctx->partial == NULL ) {
+                ctx->partial_size = ctx->recvbuf_size * 2;
+                TRACE("Initial size of partial buffer is %d \n",
+                                ctx->partial_size);
+                ctx->partial = mem_alloc( ctx->partial_size );
+                ctx->partial_len = 0;
+        }
+        remaining = ctx->partial_size - ctx->partial_len;
+        if (remaining < len ) {
+                /* need to reallocate the buffer */
+                ctx->partial_size = ctx->partial_size * 2;
+                ctx->partial = mem_realloc( ctx->partial, ctx->partial_size );
+                TRACE("Reallocated partial buffer, length now %d \n",
+                                ctx->partial_size);
+        }
+        /* Copy the received data to the end of the partial buffer */
+        memcpy(ctx->partial + ctx->partial_len,
+                        ctx->recvbuf, len );
+        ctx->partial_len += len;
+}
+
+/**
+ * Clear all data related to collecting partial datagram.
+ *
+ * This function should be called when all data for the datagram have been
+ * received (and handled).
+ *
+ * @param ctx Pointer to server context
+ */
+static void clear_partial( struct server_ctx *ctx )
+{
+        if (ctx->partial != NULL) {
+                mem_free(ctx->partial);
+                ctx->partial = NULL;
+        }
+        ctx->partial_len = 0;
+        ctx->partial_size = 0;
+}
+
+/**
  * Server loop when STREAM socket is used. 
  *
  * Wait for incoming data from remote peer and if echo mode is on, echo it
@@ -213,12 +265,20 @@ int do_server( struct server_ctx *ctx, int client_fd )
                 } else if ( recv_count == -2 ) {
                         printf("Connection closed by the remote host");
                         printf(" (received %d bytes of data)\n",total_count);
+                        clear_partial(ctx);
                         return 0;
                 } else if ( recv_count > 0 )  {
                         printf("Received %d bytes", recv_count );
                         if ( !(flags & MSG_EOR) ) {
                                 printf(" (partial)");
+                                collect_partial(ctx, recv_count);
+                        } else if ( ctx->partial != NULL ) {
+                                /* we have been collecting partial data
+                                 * and now it should be complete
+                                 */
+                                collect_partial(ctx, recv_count);
                         }
+
                         printf("\n");
 
                         total_count += recv_count;
@@ -227,16 +287,30 @@ int do_server( struct server_ctx *ctx, int client_fd )
                                 xdump_data( stdout, ctx->recvbuf, 
                                         recv_count, "Received data");
 
-                        if ( is_flag( ctx->options, ECHO_FLAG ) ) {
+                        if ( is_flag( ctx->options, ECHO_FLAG ) && (flags & MSG_EOR) ) {
+                                uint8_t *buf;
+                                size_t len;
+
+                                if (ctx->partial != NULL ){
+                                        buf = ctx->partial;
+                                        len = ctx->partial_len;
+                                } else {
+                                        buf = ctx->recvbuf;
+                                        len = recv_count;
+                                }
+
                                 DBG("Echoing data back\n");
-                                if ( send( client_fd, ctx->recvbuf, recv_count, 0 ) < 0 ) {
+                                if ( send( client_fd, buf, len, 0 ) < 0 ) {
                                         WARN("send() failed while echoing received data\n");
                                 }
                         }
+                        if (ctx->partial && (flags & MSG_EOR)) 
+                                clear_partial(ctx);
                 }
         }
         return 0;
 }
+
 
 /**
  * Server loop when SEQPKT socket is used. 
@@ -256,7 +330,6 @@ int do_server_seq( struct server_ctx *ctx )
         char peername[INET6_ADDRSTRLEN];
         void *ptr;
         uint16_t port;
-
 
         while( ! close_req ) {
 
@@ -294,6 +367,11 @@ int do_server_seq( struct server_ctx *ctx )
                         printf(" with %d bytes of data", ret);
                         if ( !(flags & MSG_EOR) ) {
                                 printf(" (partial data)");
+                                collect_partial(ctx, ret);
+                        } else {
+                                if (ctx->partial != NULL )
+                                        /* last part of partial data */
+                                        collect_partial(ctx, ret);
                         }
                         printf("\n");
 
@@ -309,14 +387,31 @@ int do_server_seq( struct server_ctx *ctx )
                                 xdump_data( stdout, ctx->recvbuf, ret, "Received data" );
                                   
                         }
-                        if ( is_flag( ctx->options, ECHO_FLAG ) ) {
+                        if ( is_flag( ctx->options, ECHO_FLAG ) && (flags & MSG_EOR) ) {
+                                uint8_t *buf;
+                                size_t len;
+                                if (ctx->partial != NULL ) {
+                                        /* we have partial data which should now be complete,
+                                         * send that
+                                         */
+                                        buf = ctx->partial;
+                                        len = ctx->partial_len;
+                                } else {
+                                        buf = ctx->recvbuf;
+                                        len = ret;
+                                }
                                 DBG("Echoing data back\n");
                                 if ( sendit_seq( ctx->sock, info.sinfo_ppid, info.sinfo_stream,
                                                         (struct sockaddr *)&peer_ss, peerlen,
-                                                        ctx->recvbuf, ret) < 0 ) {
+                                                        buf, len) < 0 ) {
                                         WARN("Error while echoing data!\n");
                                 }
                         }
+                        if ( ctx->partial && (flags & MSG_EOR))
+                                /* since all of the partial data has been received, we
+                                 * can delete that done
+                                 */
+                                clear_partial(ctx);
                 }
         }
 
