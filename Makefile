@@ -13,7 +13,7 @@ COMMON_OBJS	= debug.o common.o
 CLIENT_OBJS	= $(COMMON_OBJS) sctp_client.o 
 CLIENT_NAME	= sctp-cli
 
-SERVER_OBJS	= $(COMMON_OBJS) sctp_server.o
+SERVER_OBJS	= $(COMMON_OBJS) sctp_server.o sctp_events.o
 SERVER_NAME	= sctp-srv
 
 .PHONY	: all clean cli srv

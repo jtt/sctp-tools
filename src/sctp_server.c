@@ -52,6 +52,7 @@
 #include "defs.h"
 #include "debug.h"
 #include "common.h"
+#include "sctp_events.h"
 
 #define DEFAULT_PORT 2001
 #define DEFAULT_BACKLOG 2
@@ -352,6 +353,22 @@ int do_server_seq( struct server_ctx *ctx )
                         printf("Connection closed by remote host\n" );
                 } else if ( ret > 0 ) {
                         DBG("Received %d bytes \n", ret );
+
+                        if ( flags & MSG_NOTIFICATION ) {
+                                TRACE("Received SCTP event\n");
+                                if ( flags & MSG_EOR ) {
+                                        if (ctx->partial) { 
+                                                collect_partial(ctx,ret);
+                                                handle_event(ctx->partial);
+                                        } else {
+                                                handle_event(ctx->recvbuf);
+                                        }
+                                } else {
+                                        collect_partial(ctx,ret);
+                                }
+                                goto clr;
+                        }
+
                         if ( peer_ss.ss_family == AF_INET ) {
                                 ptr = &(((struct sockaddr_in *)&peer_ss)->sin_addr);
                                 port = ((struct sockaddr_in *)&peer_ss)->sin_port;
@@ -407,6 +424,7 @@ int do_server_seq( struct server_ctx *ctx )
                                         WARN("Error while echoing data!\n");
                                 }
                         }
+clr:
                         if ( ctx->partial && (flags & MSG_EOR))
                                 /* since all of the partial data has been received, we
                                  * can delete that done
@@ -601,9 +619,10 @@ int main( int argc, char *argv[] )
                         && is_flag( ctx.options, VERBOSE_FLAG) ) {
                 memset( &event, 0, sizeof( event ));
                 event.sctp_data_io_event = 1;
+                event.sctp_association_event = 1;
                 if ( setsockopt( ctx.sock, IPPROTO_SCTP, SCTP_EVENTS,
                                         &event, sizeof( event)) != 0 ) {
-                        fprintf(stderr, "Unable to subscribe to SCTP IO events: %s \n",
+                        fprintf(stderr, "Unable to subscribe to SCTP events: %s \n",
                                         strerror( errno ));
                         unset_flag( ctx.sock, VERBOSE_FLAG);
                 }
