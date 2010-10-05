@@ -485,7 +485,6 @@ int main( int argc, char *argv[] )
 {
         struct sockaddr_storage myaddr,remote;
         struct server_ctx ctx;
-        struct sctp_event_subscribe event;
         int cli_fd, ret;
         socklen_t addrlen;
         char peer[INET6_ADDRSTRLEN];
@@ -548,18 +547,8 @@ int main( int argc, char *argv[] )
                 return EXIT_FAILURE;
         }
 
-        if ( is_flag( ctx.options, VERBOSE_FLAG )) { 
-                memset( &event, 0, sizeof( event ));
-                event.sctp_data_io_event = 1;
-                event.sctp_association_event = 1;
-                event.sctp_shutdown_event = 1;
-                if ( setsockopt( ctx.sock, IPPROTO_SCTP, SCTP_EVENTS,
-                                        &event, sizeof( event)) != 0 ) {
-                        fprintf(stderr, "Unable to subscribe to SCTP events: %s \n",
-                                        strerror( errno ));
-                        unset_flag( ctx.sock, VERBOSE_FLAG);
-                }
-        }
+        if ( is_flag( ctx.options, VERBOSE_FLAG ))  
+                subscribe_to_events(ctx.sock); /* to err is not fatal */
 
         memset( &remote, 0, sizeof(remote));
         addrlen = sizeof( struct sockaddr_in6);

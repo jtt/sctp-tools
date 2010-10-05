@@ -49,4 +49,5 @@ int recv_wait( int sock, time_t timeout_ms, uint8_t *chunk, size_t chunk_len,
                 struct sockaddr *peer, socklen_t *peerlen, struct sctp_sndrcvinfo *info,
                 int *flags );
 void print_error( const char *msg, int num );
+int subscribe_to_events( int sock );
 #endif /* _COMMON_H_ */

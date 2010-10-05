@@ -279,3 +279,24 @@ void print_error( const char *msg, int num )
 #endif /* DEBUG */
 }
 
+/**
+ * Subscribe to ancillary SCTP events. 
+ * @param sock The socket whose events to subscribe.
+ * @return 0 if the subscription succeeded, -1 on error
+ */
+int subscribe_to_events( int sock ) 
+{
+        struct sctp_event_subscribe event;
+
+        memset( &event, 0, sizeof( event ));
+        event.sctp_data_io_event = 1;
+        event.sctp_association_event = 1;
+        event.sctp_shutdown_event = 1;
+        if ( setsockopt( sock, IPPROTO_SCTP, SCTP_EVENTS,
+                                &event, sizeof( event)) != 0 ) {
+                fprintf(stderr, "Unable to subscribe to SCTP events: %s \n",
+                                strerror( errno ));
+                return -1;
+        }
+        return 0;
+}
