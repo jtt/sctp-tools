@@ -239,95 +239,26 @@ static void clear_partial( struct server_ctx *ctx )
         ctx->partial_size = 0;
 }
 
+/* do_server() return values */
+
+#define SERVER_USER_CLOSE 0
+#define SERVER_ERROR -1
+#define SERVER_REMOTE_CLOSED -2
+
 /**
- * Server loop when STREAM socket is used. 
+ * Server loop. 
  *
  * Wait for incoming data from remote peer and if echo mode is on, echo it
  * back.
  * 
  * @param ctx Pointer to main context.
- * @param client_fd Socket to read the data from. 
- * @return -1 if error occurs, 0 on success.
+ * @param fd The socket to the remote peer (in SOCK_STREAM mode) or the "server
+ * socket" in SOCK_SEQPKT mode.
+ * @return SERVER_USER_CLOSE if user requested stop (ctrl+c was pressed),
+ * SERVER_ERROR if there was error when receiving data, SERVER_OK if the remote
+ * end closed connetion.
  */
-int do_server( struct server_ctx *ctx, int client_fd )
-{
-        int recv_count = 1;
-        int total_count = 0;
-        int flags;
-
-        while ( ! close_req ) {
-
-                flags = 0;
-                recv_count = recv_wait( client_fd, ACCEPT_TIMEOUT_MS,
-                                ctx->recvbuf, ctx->recvbuf_size, 
-                                NULL, NULL, NULL, &flags  );
-                
-                if ( recv_count == -1 ) {
-                        if ( errno == EINTR )
-                                continue;
-
-                        print_error("Unable to receive data", errno );
-                        return -1;
-                } else if ( recv_count == -2 ) {
-                        printf("Connection closed by the remote host");
-                        printf(" (received %d bytes of data)\n",total_count);
-                        clear_partial(ctx);
-                        return 0;
-                } else if ( recv_count > 0 )  {
-                        printf("Received %d bytes", recv_count );
-                        if ( !(flags & MSG_EOR) ) {
-                                printf(" (partial)");
-                                collect_partial(ctx, recv_count);
-                        } else if ( ctx->partial != NULL ) {
-                                /* we have been collecting partial data
-                                 * and now it should be complete
-                                 */
-                                collect_partial(ctx, recv_count);
-                        }
-
-                        printf("\n");
-
-                        total_count += recv_count;
-
-                        if ( is_flag( ctx->options, VERBOSE_FLAG ))
-                                xdump_data( stdout, ctx->recvbuf, 
-                                        recv_count, "Received data");
-
-                        if ( is_flag( ctx->options, ECHO_FLAG ) && (flags & MSG_EOR) ) {
-                                uint8_t *buf;
-                                size_t len;
-
-                                if (ctx->partial != NULL ){
-                                        buf = ctx->partial;
-                                        len = ctx->partial_len;
-                                } else {
-                                        buf = ctx->recvbuf;
-                                        len = recv_count;
-                                }
-
-                                DBG("Echoing data back\n");
-                                if ( send( client_fd, buf, len, 0 ) < 0 ) {
-                                        WARN("send() failed while echoing received data\n");
-                                }
-                        }
-                        if (ctx->partial && (flags & MSG_EOR)) 
-                                clear_partial(ctx);
-                }
-        }
-        return 0;
-}
-
-
-/**
- * Server loop when SEQPKT socket is used. 
- *
- * Wait for incoming data from remote peer and if echo mode is on, echo it
- * back.
- * 
- * @param ctx Pointer to main context.
- * @return -1 if error occurs, 0 on success.
- */
-int do_server_seq( struct server_ctx *ctx ) 
+int do_server( struct server_ctx *ctx, int fd ) 
 {
         struct sockaddr_storage peer_ss;
         socklen_t peerlen;
@@ -344,7 +275,7 @@ int do_server_seq( struct server_ctx *ctx )
                 peerlen = sizeof( struct sockaddr_in6);
                 flags = 0;
 
-                ret = recv_wait( ctx->sock, ACCEPT_TIMEOUT_MS,
+                ret = recv_wait( fd, ACCEPT_TIMEOUT_MS,
                                 ctx->recvbuf, ctx->recvbuf_size, 
                                 (struct sockaddr *)&peer_ss, &peerlen,
                                 &info, &flags );
@@ -353,9 +284,10 @@ int do_server_seq( struct server_ctx *ctx )
                                 continue;
 
                         print_error("Unable to read data", errno);
-                        return -1;
+                        return SERVER_ERROR;
                 } else if ( ret == -2 )  {
                         printf("Connection closed by remote host\n" );
+                        return SERVER_REMOTE_CLOSED;
                 } else if ( ret > 0 ) {
                         DBG("Received %d bytes \n", ret );
 
@@ -423,7 +355,7 @@ int do_server_seq( struct server_ctx *ctx )
                                         len = ret;
                                 }
                                 DBG("Echoing data back\n");
-                                if ( sendit_seq( ctx->sock, info.sinfo_ppid, info.sinfo_stream,
+                                if ( sendit_seq( fd, info.sinfo_ppid, info.sinfo_stream,
                                                         (struct sockaddr *)&peer_ss, peerlen,
                                                         buf, len) < 0 ) {
                                         WARN("Error while echoing data!\n");
@@ -438,7 +370,7 @@ clr:
                 }
         }
 
-        return 0;
+        return SERVER_USER_CLOSE;
 }
 
 
@@ -549,9 +481,6 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
         return 1;
 }
 
-
-
-
 int main( int argc, char *argv[] )
 {
         struct sockaddr_storage myaddr,remote;
@@ -613,15 +542,13 @@ int main( int argc, char *argv[] )
                 }
         }
 
-
         if ( bind_and_listen( &ctx ) < 0 ) {
                 fprintf(stderr, "Error while initializing the server\n" );
                 close(ctx.sock);
                 return EXIT_FAILURE;
         }
 
-        if ( is_flag( ctx.options, SEQPKT_FLAG ) 
-                        && is_flag( ctx.options, VERBOSE_FLAG) ) {
+        if ( is_flag( ctx.options, VERBOSE_FLAG )) { 
                 memset( &event, 0, sizeof( event ));
                 event.sctp_data_io_event = 1;
                 event.sctp_association_event = 1;
@@ -633,7 +560,6 @@ int main( int argc, char *argv[] )
                 }
         }
 
-
         memset( &remote, 0, sizeof(remote));
         addrlen = sizeof( struct sockaddr_in6);
 
@@ -643,7 +569,8 @@ int main( int argc, char *argv[] )
         printf("Listening on port %d \n", ctx.port );
         while ( !close_req ) {
                 if ( is_flag( ctx.options, SEQPKT_FLAG ) ) {
-                        if ( do_server_seq( &ctx ) < 0 ) 
+                        ret = do_server( &ctx, ctx.sock );
+                        if ( ret == SERVER_ERROR )
                                 break;
                 } else {
                         cli_fd = do_accept( &ctx, &remote, &addrlen );
@@ -669,7 +596,10 @@ int main( int argc, char *argv[] )
                         } else {
                                 printf("Connection from unknown\n");
                         }
-                        do_server( &ctx, cli_fd );
+                        if( do_server( &ctx, cli_fd ) == SERVER_ERROR ) {
+                                close( cli_fd);
+                                break;
+                        }
                         close( cli_fd );
                 }
         }
