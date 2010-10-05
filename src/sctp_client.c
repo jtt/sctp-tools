@@ -180,31 +180,22 @@ static int do_client( struct client_ctx *ctx )
                 }
                 printf("Sending chunk %d/%d \n", (i+1), ctx->chunk_count);
 
-                if ( is_flag( ctx->options, SEQ_FLAG ) )
-                        ret = sendit_seq( ctx->sock, ctx->ppid, ctx->streamno, 
-                                        (struct sockaddr *)&ctx->host, addrlen, 
-                                        chunk, ctx->chunk_size );
-                else
-                        ret = send( ctx->sock, chunk, ret, 0 );
+                ret = sendit_seq( ctx->sock, ctx->ppid, ctx->streamno, 
+                                (struct sockaddr *)&ctx->host, addrlen, 
+                                chunk, ctx->chunk_size );
 
                 if ( ret < 0 ) {
                         print_error("Unable to send data", errno);
                         break;
                 }
                 if ( is_flag( ctx->options, ECHO_FLAG ) ) {
-                        if ( is_flag( ctx->options, SEQ_FLAG )) {
-                                        memset( &peer, 0, sizeof( peer ));
-                                        peer_len = addrlen;
+                        memset( &peer, 0, sizeof( peer ));
+                        peer_len = addrlen;
+                        recv_len = recv_wait( ctx->sock, 
+                                        ECHO_WAIT_MS, chunk, ctx->chunk_size, 
+                                        (struct sockaddr *)&peer, &peer_len,
+                                        NULL,NULL );
 
-                                        recv_len = recv_wait( ctx->sock, 
-                                                ECHO_WAIT_MS, chunk, ctx->chunk_size, 
-                                                (struct sockaddr *)&peer, &peer_len,
-                                                NULL,NULL );
-                        } else {
-                                        recv_len = recv_wait( ctx->sock, 
-                                                ECHO_WAIT_MS, chunk, ctx->chunk_size, 
-                                                NULL, NULL, NULL, NULL );
-                        }
                         if ( recv_len < 0 ) {
                                 WARN("Error while receiving data\n");
                                 print_error("Unable to read received data", errno);
@@ -419,12 +410,6 @@ int main( int argc, char *argv[] )
                 return EXIT_SUCCESS;
         }
 
-        if (( ctx.ppid != DEFAULT_PPID || ctx.streamno != DEFAULT_STREAM_NO )
-                        && ! is_flag( ctx.options, SEQ_FLAG ) ) {
-                printf("Warning: ppid and/or stream number options are ignored for SOCK_STREAM socket\n");
-        }
-
-
         if ( ctx.host.ss_family == AF_INET ) {
                 ((struct sockaddr_in *)&(ctx.host))->sin_port = htons(ctx.port);
                 domain = PF_INET;
@@ -457,6 +442,7 @@ int main( int argc, char *argv[] )
                                         strerror(errno));
                 }
         }
+
         do_client( &ctx );
         if ( ctx.initmsg != NULL ) {
                 mem_free(ctx.initmsg);
