@@ -663,7 +663,8 @@ int main( int argc, char *argv[] )
                         } else {
                                 ptr = &(((struct sockaddr_in6 *)&remote)->sin6_addr);
                         }
-                        if ( inet_ntop(remote.ss_family, ptr, peer, addrlen ) != NULL ) {
+                        if ( inet_ntop(remote.ss_family, ptr, peer,
+                                                INET6_ADDRSTRLEN ) != NULL ) {
                                 printf("Connection from %s \n", peer );
                         } else {
                                 printf("Connection from unknown\n");
