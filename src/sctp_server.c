@@ -552,6 +552,7 @@ int main( int argc, char *argv[] )
                 memset( &event, 0, sizeof( event ));
                 event.sctp_data_io_event = 1;
                 event.sctp_association_event = 1;
+                event.sctp_shutdown_event = 1;
                 if ( setsockopt( ctx.sock, IPPROTO_SCTP, SCTP_EVENTS,
                                         &event, sizeof( event)) != 0 ) {
                         fprintf(stderr, "Unable to subscribe to SCTP events: %s \n",

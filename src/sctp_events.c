@@ -91,6 +91,16 @@ static void verbose_assoc_event( struct sctp_assoc_change *assoc_ch )
 }
 
 /**
+ * Print verbose information about incoming SHUTDOWN_EVENT.
+ * @param shut The event data.
+ */
+static void verbose_shutdown_event( struct sctp_shutdown_event *shut )
+{
+        printf("##SHUTDOWN received for association %d\n", 
+                        shut->sse_assoc_id);
+}
+
+/**
  * Handle incoming SCTP ancillary event. 
  *
  * @param data The event as it was received from socket.
@@ -98,16 +108,18 @@ static void verbose_assoc_event( struct sctp_assoc_change *assoc_ch )
  */
 int handle_event( uint8_t *data )
 {
-        union sctp_notification *not;
+        union sctp_notification *not = (union sctp_notification *)data;
 
-        not = (union sctp_notification *)data;
-
-        if (not->sn_header.sn_type == SCTP_ASSOC_CHANGE ) {
-                verbose_assoc_event(&(not->sn_assoc_change));
-        } else {
-                TRACE("Discarding event with unknown type %d \n",
-                                not->sn_header.sn_type);
+        switch( not->sn_header.sn_type ) {
+                case SCTP_ASSOC_CHANGE :
+                        verbose_assoc_event(&(not->sn_assoc_change));
+                        break;
+                case SCTP_SHUTDOWN_EVENT :
+                        verbose_shutdown_event(&(not->sn_shutdown_event));
+                        break;
+                default :
+                        TRACE("Discarding event with unknown type %d \n",
+                                        not->sn_header.sn_type);
         }
-
         return 0;
 }
