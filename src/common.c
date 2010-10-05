@@ -300,3 +300,81 @@ int subscribe_to_events( int sock )
         }
         return 0;
 }
+
+/**
+ * Initialize the partial store context. 
+ * @param store Pointer to the partial storage context.
+ */
+void partial_store_init( struct partial_store *store )
+{
+        store->partial_buf = NULL;
+        store->partial_len = 0;
+        store->partial_size = 0;
+}
+/**
+ * Save data data to the partial storage. 
+ *
+ * @param ctx Pointer to storage context
+ * @param buf Buffer containing data to store.
+ * @param len Number of bytes of data. 
+ * @return Total number of bytes stored to this storage.
+ */
+int partial_store_collect( struct partial_store *ctx, uint8_t *buf, int len)
+{
+        int remaining;
+
+        if ( ctx->partial_buf == NULL ) {
+                ctx->partial_size = len * 2;
+                TRACE("Initial size of partial buffer is %d \n",
+                                ctx->partial_size);
+                ctx->partial_buf = mem_alloc( ctx->partial_size );
+                ctx->partial_len = 0;
+        }
+        remaining = ctx->partial_size - ctx->partial_len;
+        if (remaining < len ) {
+                /* need to reallocate the buffer */
+                ctx->partial_size = ctx->partial_size * 2;
+                ctx->partial_buf = mem_realloc( ctx->partial_buf, ctx->partial_size );
+                TRACE("Reallocated partial buffer, length now %d \n",
+                                ctx->partial_size);
+        }
+        /* Copy the received data to the end of the partial buffer */
+        memcpy(ctx->partial_buf + ctx->partial_len,
+                        buf, len );
+        ctx->partial_len += len;
+        return ctx->partial_len;
+}
+
+/**
+ * Get the number of bytes currently stored on the partial buffer.
+ * @param ctx Pointer to partial storage context.
+ * @return Number of bytes of data currently stored.
+ */
+int partial_store_len( struct partial_store *ctx) 
+{
+        return ctx->partial_len;
+}
+
+/**
+ * Get the pointer to data stored. 
+ * The returned pointer is only valid if no partial_store_collect() is
+ * called. After a call to partial_store_collect() the data pointer might
+ * have been changed. 
+ *
+ * @param ctx Pointer to partial storage context.
+ * @return Pointer to the data stored. 
+ */
+uint8_t *partial_store_dataptr(struct partial_store *ctx)
+{
+        return ctx->partial_buf;
+}
+
+/**
+ * Flush the partial storage. That is reset the lenght to 0.
+ *
+ * @param ctx Pointer to partial storage context.
+ */
+void partial_store_flush(struct partial_store *ctx)
+{
+        ctx->partial_len = 0;
+}

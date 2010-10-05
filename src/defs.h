@@ -40,8 +40,10 @@
 #define _DEFS_H_
 
 
+/*
 #define DEBUG 
 #define ENABLE_ASSERTIONS
+*/
 
 #define MEM_DBG_MAX_NR_ALLOC 500
 #define DEBUG_MEM 

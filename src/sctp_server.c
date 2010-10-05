@@ -95,9 +95,7 @@ struct server_ctx {
         uint16_t port; /**< Port we are listening on */
         uint8_t *recvbuf; /**< Buffer where data is received */
         uint16_t recvbuf_size; /**< Number of bytes of data on buffer */
-        uint8_t *partial; /**< Buffer user to collect partial data */
-        size_t partial_len; /**< Number of bytes of partial data on partial buffer */
-        size_t partial_size; /**< Capacity of partial buffer */
+        struct partial_store partial; /**< partial datagrams collected here */
         flags_t options;/**< Operation flags */
         struct sctp_initmsg *initmsg; /**< association parameters, if set */
 };
@@ -191,56 +189,6 @@ int do_accept( struct server_ctx *ctx, struct sockaddr_storage *remote_ss,
         }
         return cli_fd;
 }
-
-/**
- * Save received data to the partial datagram storage. 
- *
- * @param ctx Pointer to server context
- * @param len Number of bytes of data there is available at ctx->recvbuf
- */
-static void collect_partial( struct server_ctx *ctx, int len)
-{
-        int remaining;
-
-        if ( ctx->partial == NULL ) {
-                ctx->partial_size = ctx->recvbuf_size * 2;
-                TRACE("Initial size of partial buffer is %d \n",
-                                ctx->partial_size);
-                ctx->partial = mem_alloc( ctx->partial_size );
-                ctx->partial_len = 0;
-        }
-        remaining = ctx->partial_size - ctx->partial_len;
-        if (remaining < len ) {
-                /* need to reallocate the buffer */
-                ctx->partial_size = ctx->partial_size * 2;
-                ctx->partial = mem_realloc( ctx->partial, ctx->partial_size );
-                TRACE("Reallocated partial buffer, length now %d \n",
-                                ctx->partial_size);
-        }
-        /* Copy the received data to the end of the partial buffer */
-        memcpy(ctx->partial + ctx->partial_len,
-                        ctx->recvbuf, len );
-        ctx->partial_len += len;
-}
-
-/**
- * Clear all data related to collecting partial datagram.
- *
- * This function should be called when all data for the datagram have been
- * received (and handled).
- *
- * @param ctx Pointer to server context
- */
-static void clear_partial( struct server_ctx *ctx )
-{
-        if (ctx->partial != NULL) {
-                mem_free(ctx->partial);
-                ctx->partial = NULL;
-        }
-        ctx->partial_len = 0;
-        ctx->partial_size = 0;
-}
-
 /* do_server() return values */
 
 #define SERVER_USER_CLOSE 0
@@ -296,14 +244,16 @@ int do_server( struct server_ctx *ctx, int fd )
                         if ( flags & MSG_NOTIFICATION ) {
                                 TRACE("Received SCTP event\n");
                                 if ( flags & MSG_EOR ) {
-                                        if (ctx->partial) { 
-                                                collect_partial(ctx,ret);
-                                                handle_event(ctx->partial);
+                                        if (partial_store_len(&ctx->partial) > 0 ) { 
+                                                partial_store_collect(&ctx->partial,
+                                                                ctx->recvbuf,ret);
+                                                handle_event(partial_store_dataptr(&ctx->partial));
                                         } else {
                                                 handle_event(ctx->recvbuf);
                                         }
                                 } else {
-                                        collect_partial(ctx,ret);
+                                        partial_store_collect(&ctx->partial, 
+                                                        ctx->recvbuf, ret);
                                 }
                                 goto clr;
                         }
@@ -323,12 +273,15 @@ int do_server( struct server_ctx *ctx, int fd )
                         printf(" with %d bytes of data", ret);
                         if ( !(flags & MSG_EOR) ) {
                                 printf(" (partial data)");
-                                collect_partial(ctx, ret);
+                                partial_store_collect(&ctx->partial,
+                                                ctx->recvbuf, ret);
                         } else {
-                                if (ctx->partial != NULL )
+                                if (partial_store_len(&ctx->partial) > 0 )
                                         /* last part of partial data */
-                                        collect_partial(ctx, ret);
+                                        partial_store_collect(&ctx->partial, 
+                                                        ctx->recvbuf, ret);
                         }
+                        
                         printf("\n");
 
                         if ( is_flag( ctx->options, VERBOSE_FLAG ) ) {
@@ -346,12 +299,12 @@ int do_server( struct server_ctx *ctx, int fd )
                         if ( is_flag( ctx->options, ECHO_FLAG ) && (flags & MSG_EOR) ) {
                                 uint8_t *buf;
                                 size_t len;
-                                if (ctx->partial != NULL ) {
+                                if (partial_store_len(&ctx->partial)) {
                                         /* we have partial data which should now be complete,
                                          * send that
                                          */
-                                        buf = ctx->partial;
-                                        len = ctx->partial_len;
+                                        buf = partial_store_dataptr(&ctx->partial);
+                                        len = partial_store_len(&ctx->partial);
                                 } else {
                                         buf = ctx->recvbuf;
                                         len = ret;
@@ -364,11 +317,11 @@ int do_server( struct server_ctx *ctx, int fd )
                                 }
                         }
 clr:
-                        if ( ctx->partial && (flags & MSG_EOR))
+                        if ( partial_store_len(&ctx->partial) && (flags & MSG_EOR))
                                 /* since all of the partial data has been received, we
                                  * can delete that done
                                  */
-                                clear_partial(ctx);
+                                partial_store_flush(&ctx->partial);
                 }
         }
 
@@ -508,6 +461,8 @@ int main( int argc, char *argv[] )
         memset( &ctx, 0, sizeof( ctx ));
         ctx.port = DEFAULT_PORT;
         ctx.recvbuf_size = RECVBUF_SIZE;
+
+        partial_store_init(&ctx.partial);
 
         ret = parse_args( argc, argv, &ctx );
         if ( ret  < 0 ) {

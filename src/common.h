@@ -32,6 +32,19 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
+/**
+ * context for partial storage.
+ */
+struct partial_store {
+        uint8_t *partial_buf; /**< Buffer to collect the data */
+        size_t partial_len; /**< number of bytes on partial buffer */
+        size_t partial_size; /**< Capacity of the partial buffer */
+};
+void partial_store_init( struct partial_store *store );
+int partial_store_collect( struct partial_store *ctx, uint8_t *buf, int len);
+int partial_store_len( struct partial_store *ctx);
+uint8_t *partial_store_dataptr(struct partial_store *ctx);
+void partial_store_flush(struct partial_store *ctx);
 
 typedef uint16_t flags_t;
 
