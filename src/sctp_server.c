@@ -147,7 +147,7 @@ int bind_and_listen( struct server_ctx *ctx )
 int do_accept( struct server_ctx *ctx, struct sockaddr_storage *remote_ss, 
                 socklen_t *addrlen )
 {
-        int cli_fd, ret = 0;
+        int cli_fd = 0, ret = 0;
         fd_set fds;
         struct timeval tv;
 
