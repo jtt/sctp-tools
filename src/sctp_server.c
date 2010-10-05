@@ -172,7 +172,12 @@ int do_accept( struct server_ctx *ctx, struct sockaddr_storage *remote_ss,
                                         continue; /* likely we are closing */
 
                                 print_error( "Error in accept()", errno);
+#ifdef IGNORE_ACCEPT_ERROR
+                                ret = 0;
+                                continue;
+#else
                                 return -1;
+#endif /* IGNORE_ACCEPT_ERROR */
                         }
                 } else if ( ret < 0 ) {
                         if ( errno == EINTR ) 

@@ -49,7 +49,7 @@
 #define DEBUG_MEM 
 #define DEBUG_ENTER_EXIT 
 
-#define DEBUG_DEFAULT_LEVEL 0 /* WARN */
+#define DEBUG_DEFAULT_LEVEL 0 /* TRACE */
 
 #define DBG_ERR_TO_STDOUT
 
@@ -68,13 +68,17 @@ enum dbg_module {
         DBG_MODULE_UTILS,
         DBG_MODULE_GENERIC /* this should always be the last */
 };
-
+#endif /* DPRINT_MODULE */
 /**
  * Maximum length for interface name 
  */
 #define IFNAMEMAX 20
 
-#endif /* DPRINT_MODULE */
-
+/**
+ * Don't exit if accept() returns error
+ */
+/*
+#define IGNORE_ACCEPT_ERROR
+*/
 
 #endif /* _DEFS_H_ */
