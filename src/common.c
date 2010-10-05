@@ -47,7 +47,7 @@
 #include <limits.h> /* LONG_MAX, LONG_MIN */
 #include <netdb.h>
 
-#define DBG_MODULE_NAME DBG_MODULE_UTILS
+#define DBG_MODULE_NAME DBG_MODULE_COMMON
 
 #include "defs.h"
 #include "debug.h"

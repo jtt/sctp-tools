@@ -45,6 +45,8 @@
 #include <unistd.h>
 #include <getopt.h>
 
+#define DBG_MODULE_NAME DBG_MODULE_CLIENT
+
 #include "defs.h"
 #include "debug.h"
 #include "common.h"

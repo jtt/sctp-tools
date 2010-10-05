@@ -40,10 +40,8 @@
 #define _DEFS_H_
 
 
-/*
 #define DEBUG 
 #define ENABLE_ASSERTIONS
-*/
 
 #define MEM_DBG_MAX_NR_ALLOC 500
 #define DEBUG_MEM 
@@ -66,6 +64,10 @@
 enum dbg_module {
         DBG_MODULE_MEM = 0,
         DBG_MODULE_UTILS,
+        DBG_MODULE_CLIENT,
+        DBG_MODULE_SERVER,
+        DBG_MODULE_EVENTS,
+        DBG_MODULE_COMMON,
         DBG_MODULE_GENERIC /* this should always be the last */
 };
 #endif /* DPRINT_MODULE */

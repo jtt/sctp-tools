@@ -119,6 +119,10 @@ struct dbg_module_info {
 struct dbg_module_info dbg_modules[] = {
         {"MEM",DEBUG_DEFAULT_LEVEL},
         {"UTILS",DEBUG_DEFAULT_LEVEL},
+        {"CLIENT",DEBUG_DEFAULT_LEVEL},
+        {"SERVER",DEBUG_DEFAULT_LEVEL},
+        {"EVENTS",DEBUG_DEFAULT_LEVEL},
+        {"COMMON",DEBUG_DEFAULT_LEVEL},
         {"GENERIC",DEBUG_DEFAULT_LEVEL},
 };
 #endif /* DPRINT_MODULE */

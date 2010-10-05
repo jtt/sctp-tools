@@ -42,6 +42,7 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 
+#define DBG_MODULE_NAME DBG_MODULE_EVENTS
 #include "defs.h"
 #include "debug.h"
 #include "common.h"

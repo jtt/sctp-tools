@@ -49,6 +49,8 @@
 #include <signal.h>
 #include <getopt.h>
 
+#define DBG_MODULE_NAME DBG_MODULE_SERVER
+
 #include "defs.h"
 #include "debug.h"
 #include "common.h"
