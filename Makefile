@@ -16,17 +16,20 @@ CLIENT_NAME	= sctp-cli
 SERVER_OBJS	= $(COMMON_OBJS) sctp_server.o sctp_events.o
 SERVER_NAME	= sctp-srv
 
+# Header files all modules depend on.
+COMMON_HEADERS	= src/defs.h src/common.h src/debug.h
+
 .PHONY	: all clean cli srv
 
 all	: cli srv
 
-cli	: $(CLIENT_OBJS)
+cli	: $(CLIENT_OBJS) 
 	$(CC) -o $(CLIENT_NAME) $(CLIENT_OBJS) $(LFLAGS)
 
 srv	: $(SERVER_OBJS)
 	$(CC) -o $(SERVER_NAME) $(SERVER_OBJS) $(LFLAGS)
 
-%.o	: src/%.c 
+%.o	: src/%.c $(COMMON_HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean	:
