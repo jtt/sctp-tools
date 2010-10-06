@@ -120,6 +120,7 @@ struct client_ctx {
         int sock; /**< Socket to use for sending */
         struct sockaddr_storage host; /**< Remote host address */
         uint16_t port;/**< Port number for remote host */
+        uint16_t lport; /**< Port number for local port or 0 */
         uint16_t chunk_size; /**< Number of bytes to send on each write */
         uint16_t chunk_count;/**< Number of writes to do */
         flags_t options; /**< Runtime options */
@@ -234,6 +235,7 @@ static void print_usage()
         printf("Usage: sctp_cli [options] \n");
         printf("Available options are:\n");
         printf("\t--port <port>     : Destination port is <port> \n");
+        printf("\t--lport <port>    : Bind to local port <port> \n");
         printf("\t--host <host>     : Remote host to connect is <host>\n");
         printf("\t--size <size>     : Size of the chunk to send is <size>, default %d\n",
                         DEFAULT_CHUNK_SIZE);
@@ -283,12 +285,13 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                 { "echo", 0,0,'e' },
                 { "instreams", 1,0, 'I' },
                 { "outstreams", 1,0,'O' },
+                { "lport",1,0,'L'},
                 { 0,0,0,0 }
         };
 
         while( 1 ) {
 
-                c = getopt_long(argc, argv, "p:h:c:s:Hef:I:O:", long_options, &option_index);
+                c = getopt_long(argc, argv, "p:h:c:s:HekSvTf:I:O:", long_options, &option_index);
                 if ( c == -1 ) 
                         break;
 
@@ -369,6 +372,12 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                 }
                                 ctx->initmsg->sinit_num_ostreams = streams;
                                 break;
+                        case 'L' :
+                                if (parse_uint16(optarg, &ctx->lport) < 0) {
+                                        fprintf(stderr,"Malformed local port number given\n");
+                                        return -1;
+                                }
+                                break;
                         case 'H' :
                         default :
                                 print_usage();
@@ -389,7 +398,47 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
         return 1;
 }
 
+/**
+ * Bind given socket to local port given as parameter. 
+ *
+ * @param domain PF_INET if socket is IPv4 socket, PF_INET6 if
+ * the socket is IPv6.
+ * @param sock socket to bind.
+ * @param port Local port to bind the socket into.
+ * @return 0 if the socket was bound succesfully, -1 if not.
+ */
+static int bind_to_local_port( int domain, int sock, uint16_t port)
+{
+        socklen_t salen; 
+        struct sockaddr_storage ss;
 
+        DBG("binding to local port %d\n", port);
+        
+        memset( &ss, 0, sizeof(ss));
+        if (domain == PF_INET) {
+                struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
+                salen = sizeof(struct sockaddr_in);
+                sin->sin_family = AF_INET;
+                sin->sin_port = htons(port);
+                sin->sin_addr.s_addr = htonl(INADDR_ANY);
+        } else if (domain == PF_INET6) {
+                struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
+                salen =  sizeof(struct sockaddr_in6);
+                sin6->sin6_family = AF_INET6;
+                sin6->sin6_port = htons(port);
+                memcpy(&sin6->sin6_addr, &in6addr_any, sizeof(in6addr_any)); 
+        } else {
+                WARN("Invalid domain %d\n", domain);
+                return -1;
+        }
+
+        if( bind(sock, (struct sockaddr *)&ss, salen) != 0 ) {
+                fprintf(stderr, "Unable to bind to local port: %s\n",
+                                strerror(errno));
+                return -1;
+        }
+        return 0;
+}
 
 int main( int argc, char *argv[] )
 {
@@ -432,6 +481,12 @@ int main( int argc, char *argv[] )
         if ( ctx.sock < 0 ) {
                 fprintf(stderr, "Unable to create socket: %s \n", strerror(errno));
                 return EXIT_FAILURE;
+        }
+        if (ctx.lport != 0 ) {
+                if (bind_to_local_port(domain, ctx.sock, ctx.lport) != 0 ) {
+                        close(ctx.sock);
+                        return EXIT_FAILURE;
+                }
         }
 
         if (ctx.initmsg != NULL ) {
