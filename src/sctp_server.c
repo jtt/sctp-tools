@@ -240,22 +240,15 @@ int do_server( struct server_ctx *ctx, int fd )
                         return SERVER_REMOTE_CLOSED;
                 } else if ( ret > 0 ) {
                         DBG("Received %d bytes \n", ret );
+                        partial_store_collect(&ctx->partial, ctx->recvbuf, ret);
 
                         if ( flags & MSG_NOTIFICATION ) {
                                 TRACE("Received SCTP event\n");
                                 if ( flags & MSG_EOR ) {
-                                        if (partial_store_len(&ctx->partial) > 0 ) { 
-                                                partial_store_collect(&ctx->partial,
-                                                                ctx->recvbuf,ret);
-                                                handle_event(partial_store_dataptr(&ctx->partial));
-                                        } else {
-                                                handle_event(ctx->recvbuf);
-                                        }
-                                } else {
-                                        partial_store_collect(&ctx->partial, 
-                                                        ctx->recvbuf, ret);
-                                }
-                                goto clr;
+                                        handle_event(partial_store_dataptr(&ctx->partial));
+                                        partial_store_flush(&ctx->partial);
+                                } 
+                                continue;
                         }
 
                         if ( peer_ss.ss_family == AF_INET ) {
@@ -271,16 +264,8 @@ int do_server( struct server_ctx *ctx, int fd )
                                 printf("Packet from unknown");
                         }
                         printf(" with %d bytes of data", ret);
-                        if ( !(flags & MSG_EOR) ) {
+                        if ( !(flags & MSG_EOR) )
                                 printf(" (partial data)");
-                                partial_store_collect(&ctx->partial,
-                                                ctx->recvbuf, ret);
-                        } else {
-                                if (partial_store_len(&ctx->partial) > 0 )
-                                        /* last part of partial data */
-                                        partial_store_collect(&ctx->partial, 
-                                                        ctx->recvbuf, ret);
-                        }
                         
                         printf("\n");
 
@@ -297,34 +282,18 @@ int do_server( struct server_ctx *ctx, int fd )
                                   
                         }
                         if ( is_flag( ctx->options, ECHO_FLAG ) && (flags & MSG_EOR) ) {
-                                uint8_t *buf;
-                                size_t len;
-                                if (partial_store_len(&ctx->partial)) {
-                                        /* we have partial data which should now be complete,
-                                         * send that
-                                         */
-                                        buf = partial_store_dataptr(&ctx->partial);
-                                        len = partial_store_len(&ctx->partial);
-                                } else {
-                                        buf = ctx->recvbuf;
-                                        len = ret;
-                                }
                                 DBG("Echoing data back\n");
                                 if ( sendit( fd, info.sinfo_ppid, info.sinfo_stream,
-                                                        (struct sockaddr *)&peer_ss, peerlen,
-                                                        buf, len) < 0 ) {
+                                             (struct sockaddr *)&peer_ss, peerlen,
+                                              partial_store_dataptr( &ctx->partial),
+                                              partial_store_len( &ctx->partial) ) < 0) {
                                         WARN("Error while echoing data!\n");
                                 }
                         }
-clr:
-                        if ( partial_store_len(&ctx->partial) && (flags & MSG_EOR))
-                                /* since all of the partial data has been received, we
-                                 * can delete that done
-                                 */
-                                partial_store_flush(&ctx->partial);
+                        if ( flags & MSG_EOR ) 
+                                partial_store_flush( &ctx->partial );
                 }
         }
-
         return SERVER_USER_CLOSE;
 }
 
