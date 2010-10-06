@@ -54,8 +54,9 @@ flags_t unset_flag( flags_t flags, flags_t set );
 
 int resolve( char *addr, struct sockaddr_storage *ss );
 int parse_uint16( char *str, uint16_t *dst );
+int parse_uint32(char *str, uint32_t *dst );
 
-int sendit_seq( int sock, uint16_t ppid, uint16_t streamno,
+int sendit( int sock, uint32_t ppid, uint16_t streamno,
                 struct sockaddr *dst, size_t dst_len,
                 uint8_t *chunk, int chunk_size );
 int recv_wait( int sock, time_t timeout_ms, uint8_t *chunk, size_t chunk_len,

@@ -125,7 +125,7 @@ struct client_ctx {
         uint16_t chunk_count;/**< Number of writes to do */
         flags_t options; /**< Runtime options */
         char filename[FILENAME_LEN]; /**< File to read data from */
-        uint16_t ppid; /**< PPID to set to the packet. */
+        uint32_t ppid; /**< PPID to set to the packet. */
         uint16_t streamno; /**< Stream id to set to the packet. */
         struct sctp_initmsg *initmsg; /**< association parameters, if set */
 };
@@ -183,7 +183,7 @@ static int do_client( struct client_ctx *ctx )
                 }
                 printf("Sending chunk %d/%d \n", (i+1), ctx->chunk_count);
 
-                ret = sendit_seq( ctx->sock, ctx->ppid, ctx->streamno, 
+                ret = sendit( ctx->sock, ctx->ppid, ctx->streamno, 
                                 (struct sockaddr *)&ctx->host, addrlen, 
                                 chunk, ctx->chunk_size );
 
@@ -317,7 +317,7 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                 ctx->options = set_flag( ctx->options, ECHO_FLAG );
                                 break;
                         case 'P' :
-                                if ( parse_uint16( optarg, &(ctx->ppid) ) < 0 ) {
+                                if ( parse_uint32( optarg, &(ctx->ppid) ) < 0 ) {
                                         fprintf(stderr, "Malformed PPID given\n" );
                                         return -1;
                                 }

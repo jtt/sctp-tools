@@ -310,7 +310,7 @@ int do_server( struct server_ctx *ctx, int fd )
                                         len = ret;
                                 }
                                 DBG("Echoing data back\n");
-                                if ( sendit_seq( fd, info.sinfo_ppid, info.sinfo_stream,
+                                if ( sendit( fd, info.sinfo_ppid, info.sinfo_stream,
                                                         (struct sockaddr *)&peer_ss, peerlen,
                                                         buf, len) < 0 ) {
                                         WARN("Error while echoing data!\n");

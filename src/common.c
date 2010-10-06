@@ -78,8 +78,10 @@ int resolve( char *addr, struct sockaddr_storage *ss )
         TRACE("Resolving : %s\n", addr);
 
         hent = gethostbyname( addr );
-        if ( hent == NULL ) 
+        if ( hent == NULL ) {
+                ERROR("unable to resolve host name %s\n", hstrerror(h_errno));
                 return -1;
+        }
 
         switch( hent->h_addrtype ) {
 
@@ -123,6 +125,32 @@ int parse_uint16( char *str, uint16_t *dst )
                 return -1;
 
         *dst = (uint16_t)ret;
+
+        return 0;
+}
+
+/** 
+ * @brief Parse uint32 number from given string.
+ *
+ * Parse unsigned 32-bit number from the given string.
+ * 
+ * @param str String containing the number.
+ * @param dst Pointer where the parsed number should be saved.
+ * 
+ * @return 0 if parsing succeeded, -1 if there was error.
+ */
+int parse_uint32(char *str, uint32_t *dst )
+{
+        long ret;
+
+        ret = strtol( str, NULL, 10 );
+        if ( (ret == 0 && errno != 0 ) || 
+                        (errno == ERANGE && (ret == LONG_MAX || ret == LONG_MIN ))){
+                return -1;
+        } else if ( ret < 0 || ret > 0xFFFFFFFF )
+                return -1;
+
+        *dst = (uint32_t)ret;
 
         return 0;
 }
@@ -185,7 +213,7 @@ flags_t unset_flag( flags_t flags, flags_t set )
  * 
  * @return Number of bytes sent on success <0 on error.
  */
-int sendit_seq( int sock, uint16_t ppid, uint16_t streamno,
+int sendit( int sock, uint32_t ppid, uint16_t streamno,
                 struct sockaddr *dst, size_t dst_len,
                 uint8_t *chunk, int chunk_size )
 {
