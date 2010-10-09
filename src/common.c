@@ -68,38 +68,44 @@
  */
 int resolve( char *addr, struct sockaddr_storage *ss )
 {
-        struct sockaddr_in *sin;
-        struct sockaddr_in6 *sin6;
-        struct hostent *hent;
+        struct addrinfo hints, *res = NULL;
+        int rv;
 
         if ( addr == NULL || ss == NULL )
                 return -1;
 
         TRACE("Resolving : %s\n", addr);
 
-        hent = gethostbyname( addr );
-        if ( hent == NULL ) {
-                ERROR("unable to resolve host name %s\n", hstrerror(h_errno));
+        memset( &hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+
+        rv = getaddrinfo( addr, NULL, &hints, &res);
+        if (rv != 0 ) {
+                ERROR("Unable to resolve host %s: %s\n", 
+                                addr, gai_strerror(rv));
                 return -1;
         }
+        ASSERT( res != NULL );
 
-        switch( hent->h_addrtype ) {
-
+        /* we'll take the first returned value, don't know
+         * what would be the criteria to select the one to
+         * take.
+         */
+        switch( res->ai_family ) {
                 case AF_INET6 :
-                        sin6 = (struct sockaddr_in6 *)ss;
-                        memcpy( &sin6->sin6_addr, hent->h_addr_list[0], sizeof(sin6->sin6_addr) );
-                        ss->ss_family = AF_INET6;
+                        ASSERT( res->ai_addrlen == sizeof(struct sockaddr_in));
+                        memcpy( ss, res->ai_addr, res->ai_addrlen);
                         break;
                 case AF_INET :
-                        sin = (struct sockaddr_in *)ss;
-                        memcpy( &sin->sin_addr, hent->h_addr_list[0], sizeof(sin->sin_addr) );
-                        ss->ss_family = AF_INET;
+                        ASSERT( res->ai_addrlen == sizeof(struct sockaddr_in6));
+                        memcpy( ss, res->ai_addr, res->ai_addrlen);
                         break;
                 default :
-                        WARN("gethostbyname() returned unknown addresstype %d \n", hent->h_addrtype );
+                        WARN("getaddrinfo() returned unknown addresstype %d \n", 
+                                        res->ai_family);
                         return -1;
         }
-
         return 0;
 }
 
@@ -147,7 +153,7 @@ int parse_uint32(char *str, uint32_t *dst )
         if ( (ret == 0 && errno != 0 ) || 
                         (errno == ERANGE && (ret == LONG_MAX || ret == LONG_MIN ))){
                 return -1;
-        } else if ( ret < 0 || ret > 0xFFFFFFFF )
+        } else if ( ret < 0 || ret > (long)0xFFFFFFFF )
                 return -1;
 
         *dst = (uint32_t)ret;
