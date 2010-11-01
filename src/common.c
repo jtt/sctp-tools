@@ -326,6 +326,8 @@ int subscribe_to_events( int sock )
         event.sctp_data_io_event = 1;
         event.sctp_association_event = 1;
         event.sctp_shutdown_event = 1;
+        event.sctp_send_failure_event = 1;
+
         if ( setsockopt( sock, IPPROTO_SCTP, SCTP_EVENTS,
                                 &event, sizeof( event)) != 0 ) {
                 fprintf(stderr, "Unable to subscribe to SCTP events: %s \n",

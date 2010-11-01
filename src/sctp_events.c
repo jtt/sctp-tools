@@ -102,6 +102,19 @@ static void verbose_shutdown_event( struct sctp_shutdown_event *shut )
 }
 
 /**
+ * Print verbose information about incoming SEND_FAILED event.
+ * @Param ssf The event data.
+ */
+static void verbose_send_failed_event( struct sctp_send_failed *ssf)
+{
+        printf("##SEND FAILURE for association %d\n", ssf->ssf_assoc_id);
+        printf("##Data was ");
+        if (ssf->ssf_flags & SCTP_DATA_UNSENT ) 
+                printf("not ");
+        printf("put to wire!");
+}
+
+/**
  * Handle incoming SCTP ancillary event. 
  *
  * @param data The event as it was received from socket.
@@ -117,6 +130,9 @@ int handle_event( uint8_t *data )
                         break;
                 case SCTP_SHUTDOWN_EVENT :
                         verbose_shutdown_event(&(not->sn_shutdown_event));
+                        break;
+                case SCTP_SEND_FAILED :
+                        verbose_send_failed_event(&(not->sn_send_failed));
                         break;
                 default :
                         TRACE("Discarding event with unknown type %d \n",
