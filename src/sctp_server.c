@@ -61,12 +61,13 @@
 
 #define RECVBUF_SIZE 1024
 
-#define PROG_VERSION "0.0.2"
+#define PROG_VERSION "0.0.3"
 
 /* Operation flags */
 #define VERBOSE_FLAG 0x01
 #define SEQPKT_FLAG 0x01 <<1 
 #define ECHO_FLAG 0x01 <<2
+#define XDUMP_FLAG 0x01 <<3
 /**
  * Number of milliseconds to wait on select() before checking if user has
  * requested stop.
@@ -315,9 +316,10 @@ int do_server( struct server_ctx *ctx, int fd )
                                 if ( info.sinfo_flags & SCTP_UNORDERED ) 
                                   printf("un");
                                 printf("ordered]\n");
-                                xdump_data( stdout, ctx->recvbuf, ret, "Received data" );
-                                  
                         }
+                        if (is_flag(ctx->options, XDUMP_FLAG))
+                                        xdump_data( stdout, ctx->recvbuf, ret, "Received data" );
+
                         if ( is_flag( ctx->options, ECHO_FLAG ) && (flags & MSG_EOR) ) {
                                 if ( sendit( fd, info.sinfo_ppid, info.sinfo_stream,
                                              (struct sockaddr *)&peer_ss, peerlen,
@@ -366,6 +368,7 @@ static void print_usage()
         printf("\t--seq          : use SOCK_SEQPACKET socket instead of SOCK_STREAM\n");
         printf("\t--echo         : Echo the received data back to sender\n");
         printf("\t--verbose      : Be more verbosive \n");
+        printf("\t--xdump        : Print hexdump of received data \n");
         printf("\t--instreams       : Maximum number of input streams to negotiate for the association\n");
         printf("\t--outstreams      : Number of output streams to negotiate\n");
         printf("\t--help         : Print this message \n");
@@ -384,6 +387,7 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
                 { "verbose", 0,0,'v'},
                 { "instreams", 1,0, 'I' },
                 { "outstreams", 1,0,'O' },
+                { "xdump", 0,0,'x' },
                 { 0,0,0,0 }
         };
 
@@ -414,6 +418,9 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
                                 break;
                         case 'v' :
                                 ctx->options = set_flag( ctx->options, VERBOSE_FLAG );
+                                break;
+                        case 'x' :
+                                ctx->options = set_flag(ctx->options, XDUMP_FLAG);
                                 break;
                         case 'I' :
                                 if (parse_uint16(optarg, &streams) < 0 ) {

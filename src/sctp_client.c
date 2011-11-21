@@ -52,7 +52,7 @@
 #include "common.h"
 
 
-#define PROG_VERSION "0.0.2"
+#define PROG_VERSION "0.0.3"
 
 /**
  * Flag indicating that we should keep the connection after
@@ -72,6 +72,8 @@
  * Flag indicating ECHO mode.
  */
 #define ECHO_FLAG 0x01 << 3
+
+#define XDUMP_FLAG 0x01 << 4
 
 /**
  * Maximum lenght for the file where to read the data.
@@ -178,7 +180,7 @@ static int do_client( struct client_ctx *ctx )
                 }
 
                 DBG("Sending %d bytes \n", ret );
-                if ( is_flag( ctx->options, VERBOSE_FLAG ) ) {
+                if ( is_flag( ctx->options, XDUMP_FLAG ) ) {
                         xdump_data( stdout, chunk, ret, "Data to send");
                 }
                 printf("Sending chunk %d/%d \n", (i+1), ctx->chunk_count);
@@ -246,6 +248,7 @@ static void print_usage()
                         DEFAULT_FILENAME);
         printf("\t--seq             : Use SOCK_SEQPACKET instead of SOCK_STREAM \n");
         printf("\t--verbose         : Be more verbosive\n");
+        printf("\t--xdump           : Print hexdump of sent data\n");
         printf("\t--ppid <ppid>     : The PPID value for sent chunks is <ppid>, default %d\n",
                         DEFAULT_PPID);
         printf("\t--streamid <s>    : Send data to stream with id <d>, default is %d\n",
@@ -280,6 +283,7 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                 { "file", 1, 0, 'f' },
                 { "seq", 0,0, 'S' },
                 { "verbose", 0,0, 'v' },
+                { "xdump",0,0,'x'},
                 { "ppid", 1,0, 'P' },
                 { "streamid", 1, 0, 'T' },
                 { "echo", 0,0,'e' },
@@ -349,6 +353,9 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                 break;
                         case 'v' :
                                 ctx->options = set_flag( ctx->options, VERBOSE_FLAG);
+                                break;
+                        case 'x' :
+                                ctx->options = set_flag(ctx->options, XDUMP_FLAG);
                                 break;
                         case 'I' :
                                 if (parse_uint16(optarg, &streams) < 0 ) {
@@ -506,16 +513,3 @@ int main( int argc, char *argv[] )
         }
         return EXIT_SUCCESS;
 }
-
-
-
-        
-
-
-
-
-
-
-
-
-
