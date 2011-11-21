@@ -370,6 +370,9 @@ int partial_store_collect( struct partial_store *ctx, uint8_t *buf, int len)
         if (remaining < len ) {
                 /* need to reallocate the buffer */
                 ctx->partial_size = ctx->partial_size * 2;
+                if (ctx->partial_size < ctx->partial_len + len)
+                        ctx->partial_size = ctx->partial_len + len;
+
                 ctx->partial_buf = mem_realloc( ctx->partial_buf, ctx->partial_size );
                 TRACE("Reallocated partial buffer, length now %d \n",
                                 ctx->partial_size);
