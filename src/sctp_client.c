@@ -247,6 +247,9 @@ static void print_usage()
         printf("\t--instreams       : Maximum number of input streams to negotiate for the association\n");
         printf("\t--outstreams      : Number of output streams to negotiate\n");
         printf("\t--help            : Print this message \n");
+#ifdef DEBUG
+        printf("\t--debug <level>   : Set the debug level to <level> (0-3, 0=TRACE)\n");
+#endif /* DEBUG */
 }
 
 /**
@@ -261,6 +264,9 @@ static void print_usage()
 static int parse_args( int argc, char **argv, struct client_ctx *ctx )
 {
         uint16_t streams;
+#ifdef DEBUG
+        uint16_t debug_level = DEBUG_DEFAULT_LEVEL;
+#endif /* DEBUG */
         int c, option_index;
         int got_port = 0, got_addr = 0;
         struct option long_options[] = {
@@ -280,12 +286,15 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                 { "instreams", 1,0, 'I' },
                 { "outstreams", 1,0,'O' },
                 { "lport",1,0,'L'},
+#ifdef DEBUG
+                { "debug",1,0,'D'},
+#endif /* DEBUG */
                 { 0,0,0,0 }
         };
 
         while( 1 ) {
 
-                c = getopt_long(argc, argv, "p:h:c:s:HekSvTxf:I:O:", long_options, &option_index);
+                c = getopt_long(argc, argv, "p:h:c:s:HekSvTxf:I:O:D:", long_options, &option_index);
                 if ( c == -1 ) 
                         break;
 
@@ -373,6 +382,21 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                         return -1;
                                 }
                                 break;
+#ifdef DEBUG
+                        case 'D' :
+                                if (parse_uint16(optarg, &debug_level) < 0) {
+                                        fprintf(stderr,"Malformed Debug level number given\n");
+                                        return -1;
+                                }
+                                if (debug_level > DBG_L_ERR) {
+                                        fprintf(stderr, "Invalid debug level (expected 0-3)\n");
+                                        return -1;
+                                }
+                                DBG_LEVEL(debug_level);
+                                break;
+#endif /* DEBUG */
+
+
                         case 'H' :
                         default :
                                 print_usage();
