@@ -94,11 +94,11 @@ int resolve( char *addr, struct sockaddr_storage *ss )
          */
         switch( res->ai_family ) {
                 case AF_INET6 :
-                        ASSERT( res->ai_addrlen == sizeof(struct sockaddr_in));
+                        ASSERT( res->ai_addrlen == sizeof(struct sockaddr_in6));
                         memcpy( ss, res->ai_addr, res->ai_addrlen);
                         break;
                 case AF_INET :
-                        ASSERT( res->ai_addrlen == sizeof(struct sockaddr_in6));
+                        ASSERT( res->ai_addrlen == sizeof(struct sockaddr_in));
                         memcpy( ss, res->ai_addr, res->ai_addrlen);
                         break;
                 default :
