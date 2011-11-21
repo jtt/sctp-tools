@@ -98,4 +98,10 @@ int recv_wait( int sock, time_t timeout_ms, uint8_t *chunk, size_t chunk_len,
                 int *flags );
 void print_error( const char *msg, int num );
 int subscribe_to_events( int sock );
+void print_ss( struct sockaddr_storage *ss );
+void print_input( struct sockaddr_storage *from, int len, int flags, 
+                struct sctp_sndrcvinfo *info);
+void print_output( struct sockaddr_storage *to, int len);
+void print_output_verbose( struct sockaddr_storage *to, int len,
+                uint32_t ppid, uint16_t streamno);
 #endif /* _COMMON_H_ */

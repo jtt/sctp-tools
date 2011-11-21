@@ -417,3 +417,88 @@ void partial_store_flush(struct partial_store *ctx)
 {
         ctx->partial_len = 0;
 }
+/**
+ * Print the address and port from given sockaddr to stdout.
+ * @param ss Pointer to sockaddr which should be printed.
+ */
+void print_ss( struct sockaddr_storage *ss )
+{
+        char peername[INET6_ADDRSTRLEN];
+        uint16_t port;
+        socklen_t peerlen;
+        void *ptr;
+
+        if ( ss->ss_family == AF_INET ) {
+                ptr = &(((struct sockaddr_in *)ss)->sin_addr);
+                port = ((struct sockaddr_in *)ss)->sin_port;
+                peerlen = sizeof(struct sockaddr_in);
+        } else {
+                ptr = &(((struct sockaddr_in6 *)ss)->sin6_addr);
+                port = ((struct sockaddr_in6 *)ss)->sin6_port;
+                peerlen = sizeof(struct sockaddr_in6);
+        }
+        if ( inet_ntop(ss->ss_family, ptr, peername, peerlen ) != NULL ) {
+                printf("%s:%d", peername, ntohs(port));
+        } else {
+                printf("??:%d", ntohs(port));
+        }
+}
+
+/**
+ * Print short information about incoming data to stdout.
+ * @param from Pointer to the address of the peer.
+ * @param len Number of bytes received. 
+ * @param flags The flags from recvfrom() containing additional information.
+ * @param info Pointer to struct sndrcvinfo, if non-NULL then also information
+ * contained in this struct is printed. 
+ */
+void print_input( struct sockaddr_storage *from, int len, int flags, 
+                struct sctp_sndrcvinfo *info)
+{
+
+        printf("< ");
+        print_ss(from);
+        printf(" (%d bytes) ", len);
+        if ( !(flags & MSG_EOR) )
+                printf("[partial]");
+
+        printf("\n");
+        if (info != NULL) {
+                printf("\t stream: %d ppid: %d context: %d\n", info->sinfo_stream, 
+                                info->sinfo_ppid, info->sinfo_context );
+                printf("\t ssn: %d tsn: %u cumtsn: %u ", info->sinfo_ssn, 
+                                info->sinfo_tsn, info->sinfo_cumtsn );
+                printf("[");
+                if ( info->sinfo_flags & SCTP_UNORDERED ) 
+                        printf("un");
+                printf("ordered]\n");
+        }
+}
+
+/**
+ * Print short information about outgoing data to stdout.
+ * @param to Pointer to the address of the peer.
+ * @param len Number of bytes sent.
+ */
+void print_output( struct sockaddr_storage *to, int len)
+{
+        printf("> ");
+        print_ss(to);
+        printf(" (%d bytes)", len);
+        printf("\n");
+}
+
+/**
+ * Print a bit more verbose information about outgoing data to stdout.
+ * @param to Pointer to the address of the peer.
+ * @param len Number of bytes sent.
+ * @param ppid PPID set for the outgoing packet
+ * @param streamno Number for the stream where the output was sent.
+ */
+void print_output_verbose( struct sockaddr_storage *to, int len,
+                uint32_t ppid, uint16_t streamno)
+{
+        print_output(to,len);
+        printf("\t stream: %d ppid: %d\n",
+                        streamno, ppid);
+}

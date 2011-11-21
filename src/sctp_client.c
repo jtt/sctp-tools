@@ -122,9 +122,10 @@ struct client_ctx {
 static int do_client( struct client_ctx *ctx )
 {
         socklen_t addrlen;
-        int ret,fd,i,recv_len;
+        int ret,fd,i,recv_len,recv_flags;
         uint8_t *chunk;
         struct sockaddr_storage peer;
+        struct sctp_sndrcvinfo info;
         socklen_t peer_len;
 
         if ( ctx->host.ss_family == AF_INET )
@@ -159,9 +160,9 @@ static int do_client( struct client_ctx *ctx )
                 }
 
                 DBG("Sending %d bytes \n", ret );
-                if ( is_flag( ctx->options, XDUMP_FLAG ) ) {
+                if (is_flag(ctx->options, XDUMP_FLAG ))
                         xdump_data( stdout, chunk, ret, "Data to send");
-                }
+
                 printf("Sending chunk %d/%d \n", (i+1), ctx->chunk_count);
 
                 ret = sendit( ctx->sock, ctx->ppid, ctx->streamno, 
@@ -172,13 +173,20 @@ static int do_client( struct client_ctx *ctx )
                         print_error("Unable to send data", errno);
                         break;
                 }
+                if (is_flag(ctx->options, VERBOSE_FLAG)) 
+                        print_output_verbose(&ctx->host, ctx->chunk_size,
+                                        ctx->ppid, ctx->streamno);
+
+
                 if ( is_flag( ctx->options, ECHO_FLAG ) ) {
-                        memset( &peer, 0, sizeof( peer ));
+                        memset( &peer, 0, sizeof(peer));
+                        memset( &info, 0, sizeof(info));
                         peer_len = addrlen;
+                        recv_flags = 0;
                         recv_len = recv_wait( ctx->sock, 
                                         ECHO_WAIT_MS, chunk, ctx->chunk_size, 
                                         (struct sockaddr *)&peer, &peer_len,
-                                        NULL,NULL );
+                                        &info,&recv_flags);
 
                         if ( recv_len < 0 ) {
                                 WARN("Error while receiving data\n");
@@ -187,7 +195,12 @@ static int do_client( struct client_ctx *ctx )
                         } else if ( recv_len == 0 ) {
                                 printf("Timed out while waiting for echo\n");
                         } else {
+                                if (is_flag(ctx->options, VERBOSE_FLAG))
+                                        print_input(&peer, recv_len, recv_flags,&info);
+
                                 printf("Received %d bytes of possible echo\n", recv_len);
+                                if (is_flag(ctx->options, XDUMP_FLAG))
+                                        xdump_data(stdout,chunk, recv_len, "Received data");
                         }
                 }
         }
@@ -200,8 +213,6 @@ static int do_client( struct client_ctx *ctx )
                         WARN("read() failed : %s \n", strerror(errno));
                 }
         }
-
-
         close( ctx->sock );
 
         return 0;
@@ -429,6 +440,7 @@ static int bind_to_local_port( int domain, int sock, uint16_t port)
 int main( int argc, char *argv[] )
 {
         struct client_ctx ctx;
+        struct sctp_event_subscribe event;
         int ret, domain, type;
 
         memset( &ctx, 0, sizeof( ctx));
@@ -485,6 +497,21 @@ int main( int argc, char *argv[] )
                                         strerror(errno));
                 }
         }
+        if (is_flag(ctx.options, VERBOSE_FLAG)) {
+                /* we need to subscribe to I/O events to be able to show them
+                 * from received data
+                 */
+                memset(&event, 0, sizeof(event));
+                event.sctp_data_io_event = 1;
+
+                if (setsockopt(ctx.sock, IPPROTO_SCTP, SCTP_EVENTS,
+                                        &event, sizeof(event)) != 0 ) {
+                        WARN("Unable to register for SCTP IO events: %s \n",
+                                        strerror(errno));
+                        /* not a fatal error, we just get the I/O info wrong */
+                }
+        }
+
 
         do_client( &ctx );
         if ( ctx.initmsg != NULL ) {

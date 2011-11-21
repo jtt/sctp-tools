@@ -97,63 +97,6 @@ struct server_ctx {
 };
 
 /**
- * Print the address and port from given sockaddr to stdout.
- * @param ss Pointer to sockaddr which should be printed.
- */
-static void print_ss( struct sockaddr_storage *ss )
-{
-        char peername[INET6_ADDRSTRLEN];
-        uint16_t port;
-        socklen_t peerlen;
-        void *ptr;
-
-        if ( ss->ss_family == AF_INET ) {
-                ptr = &(((struct sockaddr_in *)ss)->sin_addr);
-                port = ((struct sockaddr_in *)ss)->sin_port;
-                peerlen = sizeof(struct sockaddr_in);
-        } else {
-                ptr = &(((struct sockaddr_in6 *)ss)->sin6_addr);
-                port = ((struct sockaddr_in6 *)ss)->sin6_port;
-                peerlen = sizeof(struct sockaddr_in6);
-        }
-        if ( inet_ntop(ss->ss_family, ptr, peername, peerlen ) != NULL ) {
-                printf("%s:%d", peername, ntohs(port));
-        } else {
-                printf("??:%d", ntohs(port));
-        }
-}
-
-/**
- * Print short information about incoming data to stdout.
- * @param from Pointer to the address of the peer.
- * @param len Number of bytes received. 
- * @param flags The flags from recvfrom() containing additional information.
- */
-static void print_input( struct sockaddr_storage *from, int len, int flags )
-{
-
-        printf("< ");
-        print_ss(from);
-        printf(" (%d bytes) ", len);
-        if ( !(flags & MSG_EOR) )
-                printf("[partial]");
-
-        printf("\n");
-}
-
-/**
- * Print short information about outgoing data to stdout.
- * @param to Pointer to the address of the peer.
- * @param len Number of bytes sent.
- */
-static void print_output( struct sockaddr_storage *to, int len)
-{
-        printf("> ");
-        print_ss(to);
-        printf(" (%d bytes)", len);
-        printf("\n");
-}
-/**
  * Bind to requested port and set the socket to listen for incoming
  * connections.
  * The port is read from the main context.
@@ -300,18 +243,11 @@ int do_server( struct server_ctx *ctx, int fd )
                                 continue;
                         }
 
-                        print_input( &peer_ss, ret, flags);
+                        if (is_flag(ctx->options, VERBOSE_FLAG)) 
+                                print_input( &peer_ss, ret, flags, &info);
+                        else
+                                print_input( &peer_ss, ret, flags, NULL);
 
-                        if ( is_flag( ctx->options, VERBOSE_FLAG ) ) {
-                                printf("\t stream: %d ppid: %d context: %d\n", info.sinfo_stream, 
-                                                info.sinfo_ppid, info.sinfo_context );
-                                printf("\t ssn: %d tsn: %u cumtsn: %u ", info.sinfo_ssn, 
-                                                info.sinfo_tsn, info.sinfo_cumtsn );
-                                printf("[");
-                                if ( info.sinfo_flags & SCTP_UNORDERED ) 
-                                  printf("un");
-                                printf("ordered]\n");
-                        }
                         if (is_flag(ctx->options, XDUMP_FLAG))
                                         xdump_data( stdout, ctx->recvbuf, ret, "Received data" );
 
@@ -322,14 +258,14 @@ int do_server( struct server_ctx *ctx, int fd )
                                               partial_store_len( &ctx->partial) ) < 0) {
                                         WARN("Error while echoing data!\n");
                                 } else {
-                                        print_output( &peer_ss,
-                                                        partial_store_len(&ctx->partial));
-                                        if ( is_flag( ctx->options, VERBOSE_FLAG)) {
-                                                printf("\t stream: %d ppid: %d\n",
-                                                     info.sinfo_stream, info.sinfo_ppid);
-                                        }
+                                        if (is_flag(ctx->options, VERBOSE_FLAG)) 
+                                                print_output_verbose(&peer_ss,
+                                                     partial_store_len(&ctx->partial),
+                                                     info.sinfo_ppid, info.sinfo_stream);
+                                        else
+                                                print_output( &peer_ss,
+                                                     partial_store_len(&ctx->partial));
                                 }
-
                         }
                         if ( flags & MSG_EOR ) 
                                 partial_store_flush( &ctx->partial );
