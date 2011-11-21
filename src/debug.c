@@ -43,7 +43,7 @@
  * are not properly documented. My bad.
  *  
  *
- * Copyright (c) 2002 - 2008, J. Taimisto
+ * Copyright (c) 2002 - 2006, J. Taimisto
  * All rights reserved.
  *  
  * Redistribution and use in source and binary forms, with or without
@@ -82,11 +82,6 @@
 #include <syslog.h>
 #include <ctype.h>
 #include <time.h>
-
-#ifdef DEBUG_MPZ
-#include <gmp.h>
-#include "curve.h"
-#endif
 
 #include "defs.h"
 #include "debug.h"
@@ -154,9 +149,9 @@ static enum dbg_level dbg_current_level = DEBUG_DEFAULT_LEVEL;
  * this file.
  * This should be used from DBG_INIT() macro, not directly.
  */ 
-void dbg_set_file(char *name)
+static void dbg_set_file(char *name)
 {
-        if ( dbg_initialized ) {
+        if ( dbg_initialized && dbg_file != NULL ) {
                 fclose(dbg_file);
         }
         dbg_file = fopen(name,"w"); 
@@ -170,14 +165,43 @@ void dbg_set_file(char *name)
 /**
  * Close the debug file
  *
- *  This should be used by DBG_DEINIT macro
  */  
-void dbg_exit( void )
+static void dbg_close_file( void )
 {
-        if ( dbg_initialized ) {
+        if ( dbg_initialized && dbg_file != NULL ) {
+                fflush(dbg_file);
                 fclose(dbg_file);
-                dbg_initialized = 0;
+                dbg_file = NULL;
         }
+}
+
+/**
+ * Deinitialize the debugging system. If debugs have been written to a file,
+ * the file is closed. 
+ */
+void dbg_deinit( void )
+{
+#ifdef DEBUG_MEM
+        dump_alloc_table();
+#endif /* DEBUG_MEM */
+        dbg_close_file();
+        dbg_initialized = 0;
+}
+
+
+/**
+ * Initialize debuggin framework, name of the file where debugs will be written
+ * can be given as parameter. 
+ * This function should not be called directly, DBG_DEINIT should be used
+ * instead.
+ * @param filename Name of the debug file, NULL for stdout
+ */
+void dbg_init(char *filename)
+{
+        if (filename != NULL)
+                dbg_set_file(filename);
+
+        atexit(dbg_deinit);
 }
 
 /**
@@ -442,12 +466,11 @@ static void add_dbg_table(const char *name, size_t size, void *ptr)
 {
         int i=0;
 
-        while ( alloc_table[i].flag == MEM_DBG_USED && i < MEM_DBG_MAX_NR_ALLOC ) {
+        while ( i < MEM_DBG_MAX_NR_ALLOC && alloc_table[i].flag == MEM_DBG_USED ) 
                 i++;
-        }
+
         if ( i == MEM_DBG_MAX_NR_ALLOC ) {
                 ERROR_MSG(__FUNCTION__,"alloc_table is full, increase MEM_DBG_MAX_NR_ALLOC");
-                EXIT_F();
                 return;
         } else {
                 strcpy(alloc_table[i].fname,name); /* XXX */
@@ -475,18 +498,16 @@ static void rem_dbg_table(void *ptr)
 {
         int i = 0;
 
-        while ( i < MEM_DBG_MAX_NR_ALLOC && alloc_table[i].ptr != ptr ) {
+        while ( i < MEM_DBG_MAX_NR_ALLOC && alloc_table[i].ptr != ptr )
                 i++;
-        }
 
-        if ( alloc_table[i].ptr == ptr ) {
+        if ( i == MEM_DBG_MAX_NR_ALLOC ) {
+                ERROR("Unable to find pointer which was freed\n");
+        } else if ( alloc_table[i].ptr == ptr ) {
                 mem_dbg_alloc = mem_dbg_alloc - alloc_table[i].size;
                 alloc_table[i].ptr = NULL;
                 alloc_table[i].flag = MEM_DBG_UNUSED;
-        } else if ( i == MEM_DBG_MAX_NR_ALLOC ) {
-                ERROR_MSG(__FUNCTION__,"didn't find the ptr!!!");
-                return;
-        }
+        } 
         return;
 }
 
@@ -503,11 +524,9 @@ void dump_alloc_table( void )
         DPRINT("--=[ Dumping alloc table ]=--\n");
         for ( i=0; i< MEM_DBG_MAX_NR_ALLOC; i++ ){
                 if ( alloc_table[i].flag == MEM_DBG_USED ) {
-                        DPRINT("--[%d\t (%s) %s [%p](%d bytes)\n",i,alloc_table[i].flag==MEM_DBG_UNUSED?"UNUSED":"USED"
+                        DPRINT("--[%d\t %s [%p](%d bytes)\n",i
                                ,alloc_table[i].fname,alloc_table[i].ptr,alloc_table[i].size);
-                        if ( alloc_table[i].flag == MEM_DBG_USED ) {
                                 cnt = cnt + alloc_table[i].size;
-                        }
                 }
         }
         DPRINT("Total unfreed memory %d bytes (mem_dbg_alloc = %ld)\n",cnt,mem_dbg_alloc);
@@ -530,17 +549,35 @@ void dump_alloc_table( void )
  */ 
 void *dbg_mem_alloc(const char *f, size_t size )
 {
-	void *ptr;
+        void *ptr;
 
-	ptr = (void *)malloc( size );
-	if ( ptr == NULL ) {
-		fprintf(stderr,"Malloc killed Kenny!\n" );
-		exit(1);
-	}
+        ptr = (void *)malloc( size );
+#ifdef ENABLE_ASSERTIONS
+        ASSERT( ptr != NULL );
+#else
+        abort();
+#endif /* ENABLE_ASSERTIONS */
+
         add_dbg_table(f,size,ptr);
         DPRINT("%s allocated %d bytes (allocated to %p)\n",f,size,ptr);
+        return ptr;
+}
 
-	return ptr;
+/**
+ * Allocate and initialize to zero memory with debugging enabled. 
+ * @ingroup debugs
+ * This function should not be called directly.
+ * @see do_mem_alloc
+ * @param f Name of the function doing the allocation.
+ * @param size Number of bytes to allocate.
+ * @return Pointer to the allocated and initialized block.
+ */
+void *dbg_mem_zalloc(const char *f, size_t size)
+{
+        void *ptr = dbg_mem_alloc(f,size);
+        if (ptr)
+                memset(ptr,0,size);
+        return ptr;
 }
 
 /**
@@ -558,10 +595,11 @@ void *dbg_mem_realloc( const char *f, void *ptr, size_t size )
         void *nptr ;
 
         nptr = (void *)realloc(ptr, size );
-        if ( nptr == NULL ) {
-                fprintf(stderr, "realloc() killed Kenny!\n" );
-                exit( 1 );
-        }
+#ifdef ENABLE_ASSERTIONS
+        ASSERT( ptr != NULL );
+#else
+        abort();
+#endif /* ENABLE_ASSERTIONS */
         rem_dbg_table( ptr );
         add_dbg_table( f, size, nptr );
         DBG( "%s reallocated %d bytes (allocated to %p,was %p)\n",f,size,nptr,ptr );
@@ -580,12 +618,12 @@ void dbg_mem_free(const char *f, void *ptr )
 
         DPRINT("DEBUG_MEM: %s freed memory (freeing from %p)\n",f,ptr);
 
-	if ( ptr == NULL ) {
-		ERROR_MSG("mem_free","Freeing NULL pointer!");
-		return;
-	} else {
-		free( ptr );
-	}
+        if ( ptr == NULL ) {
+                ERROR("trying to free NULL pointer\n");
+                return;
+        } else {
+                free( ptr );
+        }
         rem_dbg_table(ptr);
 }
 #endif /* DEBUG_MEM */
@@ -659,17 +697,35 @@ void log_message(enum log_level lvl, const char *format, ...)
  */
 void *do_mem_alloc( size_t size )
 {
-	void *ptr;
+        void *ptr;
 
-
-	ptr = (void *)malloc( size );
-	if ( ptr == NULL ) {
-		fprintf(stderr,"Malloc tappoi Kennyn!");
-		exit(1);
-	}
-	return ptr;
+        ptr = (void *)malloc( size );
+#ifdef ENABLE_ASSERTIONS
+        ASSERT( ptr != NULL );
+#else
+        if (ptr == NULL)
+                abort();
+#endif /* ENABLE_ASSERTIONS */
+        return ptr;
 }
 
+/**
+ * Allocate and intialize to zero a block of memory.
+ * @ingroup utils
+ * Wrapper for malloc() with error checking and initialization.
+ * The function should not be used directly. Macro mem_alloc() should 
+ * be used for memory allocations.
+ * @param size Number of bytes to allocate.
+ * @return Pointer to the allocated and initialized data area.
+ */
+void *do_mem_zalloc(size_t size)
+{
+        void *ptr = do_mem_alloc(size);
+        if (ptr)
+                memset(ptr,0,size);
+
+        return ptr;
+}
 
 /** 
  * @brief Wrapper for realloc with error checking. 
@@ -687,10 +743,12 @@ void *do_mem_realloc( void *ptr, size_t size )
         void *nptr;
 
         nptr = (void *)realloc( ptr, size );
-        if ( nptr == NULL ) {
-                fprintf( stderr, "realloc() killed Kenny!" );
-                exit( 1 );
-        }
+#ifdef ENABLE_ASSERTIONS
+        ASSERT( nptr != NULL );
+#else
+        if (nptr == NULL) 
+		abort();
+#endif /* ENABLE_ASSERTIONS */
         return nptr;
 }
 /**
@@ -704,12 +762,12 @@ void *do_mem_realloc( void *ptr, size_t size )
  */
 void do_mem_free( void *ptr ) 
 {
-	if ( ptr == NULL ) {
-		ERROR_MSG("mem_free","Freeing NULL pointer!");
-		return;
-	} else {
-		free( ptr );
-	}
+        if ( ptr == NULL ) {
+                ERROR("Trying to free NULL pointer!");
+                return;
+        } else {
+                free( ptr );
+        }
 }
 
 /*
@@ -729,71 +787,46 @@ void do_mem_free( void *ptr )
 
 void str2bytes(char *str,unsigned char *buf, int *buflen)
 {
-	int len = strlen(str);
-	int i;
-	unsigned char *ptr;
+        int len = strlen(str);
+        int i;
+        unsigned char *ptr;
 
-	ptr = buf; 
-	for (i=0; i < len; i++ ) {
-		if ( '0' <= str[i] && str[i] <= '9' ) {
-			*ptr = str[i]^0x30;
-		} else if ( 'a'<= str[i] && str[i]<='f' ) {
-			*ptr = str[i]- 'a' + 10;
+        ptr = buf; 
+        for (i=0; i < len; i++ ) {
+                if ( '0' <= str[i] && str[i] <= '9' ) {
+                        *ptr = str[i]^0x30;
+                } else if ( 'a'<= str[i] && str[i]<='f' ) {
+                        *ptr = str[i]- 'a' + 10;
                 } else if ( 'A' <= str[i] && str[i] <= 'F' ) {
                         *ptr = tolower( str[i] ) - 'a' + 10;
-		} else {
-			ERROR_MSG("str2bytes","Wrong characters in string!");
-		}
-		if (str[i+1] == '\0' ) {
-			break;
-		}
-		*ptr = *ptr<<4;
+                } else {
+                        ERROR_MSG("str2bytes","Wrong characters in string!");
+                }
+                if (str[i+1] == '\0' ) {
+                        break;
+                }
+                *ptr = *ptr<<4;
 
-		i++;
-			
-		if ( '0' <= str[i] && str[i] <= '9' ) {
-			*ptr = *ptr|(str[i]^0x30);
-		} else if ( 'a'<= str[i] && str[i] <='f' ) {
-			*ptr = *ptr|((str[i] - 'a' + 10));
+                i++;
+
+                if ( '0' <= str[i] && str[i] <= '9' ) {
+                        *ptr = *ptr|(str[i]^0x30);
+                } else if ( 'a'<= str[i] && str[i] <='f' ) {
+                        *ptr = *ptr|((str[i] - 'a' + 10));
                 } else if ( 'A' <= str[i] && str[i] <= 'F' ) {
                         *ptr = *ptr | ( tolower( str[i] ) - 'a' + 10 );
-		} else {
-			ERROR_MSG("str2bytes","Wrong characters in string!");
-		}
-		
-		ptr++;
-	}
+                } else {
+                        ERROR_MSG("str2bytes","Wrong characters in string!");
+                }
+
+                ptr++;
+        }
 #if 0
 #ifdef DEBUG
-	dump_data(buf,len%2==0?len/2:len/2+1,"[str2bytes] Data out");
+        dump_data(buf,len%2==0?len/2:len/2+1,"[str2bytes] Data out");
 #endif
 #endif 
-	*buflen = len%2==0?len/2:len/2+1;
-}
-/**
- * Converts given bytestring to string 
- * @ingroup utils
- * Does no memory allocation...
- *@param bytes The bytestring
- *@param str The string 
- *@param bytelen of the bytestring 
- */
-
-int bytes2str(unsigned char *bytes,char *str,int bytelen)
-{
-	int i;
-	unsigned char *ptr;
-	char *str_tmp;
-	
-	ptr = bytes;
-	str_tmp = str;
-	for (i=0; i < bytelen; i++ ) {
-		sprintf(str_tmp,"%.2x",*ptr);
-		ptr++;
-		str_tmp += 2;
-	}
-	
-	return 0;
+        *buflen = len%2==0?len/2:len/2+1;
 }
 /**
  * Returns byte representation of (unsigned) integer
@@ -809,9 +842,9 @@ void i2bytes(int nbr, unsigned char *bytes)
 {
 	int i;
 
-	for( i=0; i < 4; i++ ) {
-		bytes[i] = UI_GET_BYTE(nbr,i);
-	}
+        for( i=0; i < 4; i++ ) {
+                bytes[i] = UI_GET_BYTE(nbr,i);
+        }
 
 }
 /*
@@ -914,75 +947,3 @@ int xdump_data(FILE *fp, unsigned char *buf, unsigned int len,
         }
         return 0;
 }
-
-/*
- * Functions for gmp debugging
- */ 
-#ifdef DEBUG_MPZ
-/**
- * Prints out an GMP integer in hex
- * @ingroup debugs
- *
- *@param p An GMP integer to be printed 
- *@param s The 'name' of the integer 
- */
-
-void print_mp(mpz_t p,char *s)
-{
-	printf("\n%s [hex]: ",s);
-	mpz_out_str(stdout,16,p);
-	printf("\n");
-}
-/**
- * Prints out an GMP integer in decimal
- * @ingroup debugs
- *
- *@param p An GMP integer to be printed
- *@param s The 'name' of the integer
- */
-void print_mp_d(mpz_t p, const char *s)
-{
-	printf("\n%s [dec]: ",s);
-	mpz_out_str(stdout,10,p);
-	printf("\n");
-}
-/**
- * Converts given GMP integer to bytestring
- * @ingroup debugs
- * Does no memory allocation, the space needed for 
- * bytearray is mpz_size(number) * 4 * sizeof(unsigned char)
- *
- * @bug We assume that the 'limb' of GMP integer is unsigned long int 
- * This may not be true for all platforms.
- *
- *@param number The GMP integer to convert
- *@param bytes The bytestring will be stored here
- *@param len Length of the bytestring 
- *@return 0 if all is fine, -1 is length is too small
- */
-int mpz2bytes(mpz_t number, unsigned char *bytes, int len)
-{
-	unsigned long int raaja;
-	unsigned char *ptr;
-	int i,j;
-	int size;
-	
-	size = mpz_size(number);
-	if ( len < 4*size ) {
-		ERROR_MSG("mpz2bytes","Length of bytebuffer is too small!");
-		return -1;
-	}
-
-	memset(bytes,0,len);
-	ptr = bytes;
-	for (i=size-1; i>=0; i-- ) {
-		raaja = mpz_getlimbn(number,i);
-		for (j=4; j > 0; j-- ) {
-			*ptr = UI_GET_BYTE(raaja,j);
-			ptr++;
-		}
-	}
-
-	return 0;
-}
-#endif /* DEBUG_MPZ */

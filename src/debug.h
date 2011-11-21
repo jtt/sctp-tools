@@ -6,7 +6,7 @@
  * This file contains all debug macro definitions as well as 
  * function declarations. 
  *
- * Copyright (c) 2002 - 2010, J. Taimisto
+ * Copyright (c) 2002 - 2006, J. Taimisto
  * All rights reserved.
  *  
  * Redistribution and use in source and binary forms, with or without
@@ -108,8 +108,8 @@ extern int dbg_initialized;
 #define DEBUG_XDUMP(d,l,m)(dbg_xdump_data(dbg_initialized?dbg_file:stdout,d,l,m))
 #endif /* DPRINT_MODULE */
 
-#define DBG_INIT(f)(dbg_set_file(f))
-#define DBG_DEINIT()(dbg_exit())
+#define DBG_INIT(f)(dbg_init(f))
+#define DBG_DEINIT()(dbg_deinit())
 #define DBG_LEVEL(l)( dbg_set_level(l) )
 #ifdef DPRINT_MODULE
 #define DBG_MODULE_LEVEL(m,l)( dbg_set_module_level(m,l) )
@@ -149,8 +149,8 @@ extern int dbg_initialized;
 #ifdef ENABLE_ASSERTIONS
 #define ASSERT(c) do {\
         if ( ! (c) ) { \
-                fprintf(stderr,"Assertion failed on %s:%d\n",__FILE__,__LINE__);\
-                exit(-1);\
+                fprintf(stderr,"Assertion '%s' failed on %s:%d\n",#c,__FILE__,__LINE__);\
+                abort();\
         }\
 } while(0);
 
@@ -206,9 +206,11 @@ void log_message(enum log_level, const char *format, ...);
 void *dbg_mem_alloc(const char *f, size_t size);
 void dbg_mem_free(const char *f, void *ptr);
 void *dbg_mem_realloc( const char *f, void *ptr, size_t size );
-#define mem_alloc(s) dbg_mem_alloc(__FUNCTION__,s)
-#define mem_free(p) dbg_mem_free(__FUNCTION__,p)
-#define mem_realloc(p,s) dbg_mem_realloc(__FUNCTION__,p,s)
+void *dbg_mem_zalloc(const char *f, size_t size);
+#define mem_alloc(s) dbg_mem_alloc(__FUNCTION__,(s))
+#define mem_free(p) dbg_mem_free(__FUNCTION__,(p))
+#define mem_realloc(p,s) dbg_mem_realloc(__FUNCTION__,(p),(s))
+#define mem_zalloc(s) dbg_mem_zalloc(__FUNCTION__,(s))
 void dump_alloc_table( void );
 
 #define DEBUG_SH_MEM 
@@ -217,16 +219,18 @@ void dump_alloc_table( void );
 void *do_mem_alloc( size_t size );
 void do_mem_free( void *ptr );
 void *do_mem_realloc( void *ptr, size_t size );
-#define mem_alloc(s) do_mem_alloc(s)
-#define mem_free(p) do_mem_free(p)
-#define mem_realloc(p,s) do_mem_realloc(p,s)
+void *do_mem_zalloc( size_t size);
+#define mem_alloc(s) do_mem_alloc((s))
+#define mem_free(p) do_mem_free((p))
+#define mem_realloc(p,s) do_mem_realloc((p),(s))
+#define mem_zalloc(s) do_mem_zalloc((s))
 #endif /* DEBUG_MEM && DEBUG */
 /*
  * Functions used only when DEBUG was set
  */ 
 #ifdef DEBUG
-void dbg_set_file(char *name);
-void dbg_exit( void );
+void dbg_init(char *filename);
+void dbg_deinit( void );
 void dbg_set_level( enum dbg_level lvl );
 #ifdef DPRINT_MODULE
 void dbg_set_module_level( enum dbg_module module, enum dbg_level lvl );
@@ -257,17 +261,6 @@ int xdump_data(FILE *fp, unsigned char *buf, unsigned int len,
  * Utility functions, usable always 
  */ 
 void str2bytes(char *str,unsigned char *buf, int *buflen);
-int bytes2str(unsigned char *bytes,char *str,int bytelen);
 void i2bytes(int nbr, unsigned char *bytes);
 
-/*
- * Functions for gmp debugging
- */ 
-#ifdef MPZ_DEBUG
-void print_mp(mpz_t p,char *s);
-void print_mp_d(mpz_t p, const char *s);
-int mpz2bytes(mpz_t number, unsigned char *bytes, int len);
-#endif /* MPZ_DEBUG */
-
 #endif /* _DEBUG_H_ */
-
