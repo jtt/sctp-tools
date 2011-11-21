@@ -285,7 +285,7 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
 
         while( 1 ) {
 
-                c = getopt_long(argc, argv, "p:h:c:s:HekSvTf:I:O:", long_options, &option_index);
+                c = getopt_long(argc, argv, "p:h:c:s:HekSvTxf:I:O:", long_options, &option_index);
                 if ( c == -1 ) 
                         break;
 
