@@ -497,7 +497,7 @@ int main( int argc, char *argv[] )
                                         strerror(errno));
                 }
         }
-        if (is_flag(ctx.options, VERBOSE_FLAG)) {
+        if (is_flag(ctx.options, (VERBOSE_FLAG|ECHO_FLAG))) {
                 /* we need to subscribe to I/O events to be able to show them
                  * from received data
                  */
