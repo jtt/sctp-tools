@@ -63,11 +63,6 @@
 
 #define PROG_VERSION "0.0.3"
 
-/* Operation flags */
-#define VERBOSE_FLAG 0x01
-#define SEQPKT_FLAG 0x01 <<1 
-#define ECHO_FLAG 0x01 <<2
-#define XDUMP_FLAG 0x01 <<3
 /**
  * Number of milliseconds to wait on select() before checking if user has
  * requested stop.
@@ -411,7 +406,7 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
                                 }
                                 break;
                         case 's' :
-                                ctx->options = set_flag( ctx->options, SEQPKT_FLAG );
+                                ctx->options = set_flag( ctx->options, SEQ_FLAG );
                                 break;
                         case 'e' :
                                 ctx->options = set_flag( ctx->options, ECHO_FLAG );
@@ -495,7 +490,7 @@ int main( int argc, char *argv[] )
         memset( &myaddr, 0, sizeof( myaddr));
         myaddr.ss_family = AF_INET6;
 
-        if ( is_flag( ctx.options, SEQPKT_FLAG )) {
+        if ( is_flag( ctx.options, SEQ_FLAG )) {
                 DBG("Using SEQPKT socket\n");
                 ctx.sock = socket( PF_INET6, SOCK_SEQPACKET, IPPROTO_SCTP );
         } else {
@@ -534,7 +529,7 @@ int main( int argc, char *argv[] )
 
         printf("Listening on port %d \n", ctx.port );
         while ( !close_req ) {
-                if ( is_flag( ctx.options, SEQPKT_FLAG ) ) {
+                if ( is_flag( ctx.options, SEQ_FLAG ) ) {
                         ret = do_server( &ctx, ctx.sock );
                         if ( ret == SERVER_ERROR )
                                 break;

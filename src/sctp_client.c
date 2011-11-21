@@ -55,27 +55,6 @@
 #define PROG_VERSION "0.0.3"
 
 /**
- * Flag indicating that we should keep the connection after
- * all data is sent.
- */
-#define KEEP_FLAG 0x01
-/**
- * Flag indicating verbose mode. 
- */
-#define VERBOSE_FLAG 0x01 << 1
-/**
- * Flag indicating the SOCK_SEQPACKET should be used. 
- */
-#define SEQ_FLAG 0x01 << 2
-
-/**
- * Flag indicating ECHO mode.
- */
-#define ECHO_FLAG 0x01 << 3
-
-#define XDUMP_FLAG 0x01 << 4
-
-/**
  * Maximum lenght for the file where to read the data.
  */
 #define FILENAME_LEN 120

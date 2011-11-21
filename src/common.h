@@ -46,7 +46,41 @@ int partial_store_len( struct partial_store *ctx);
 uint8_t *partial_store_dataptr(struct partial_store *ctx);
 void partial_store_flush(struct partial_store *ctx);
 
+/**
+ * typedef for the flag type.
+ * Typedeffing it allows us to change the size of flags set more easily
+ */
 typedef uint16_t flags_t;
+
+/*
+ * common operation flags
+ */
+
+/**
+ * Flag indicating that we should keep the connection after
+ * all data is sent (Client only)
+ */
+#define KEEP_FLAG 0x01
+/**
+ * Flag indicating verbose mode. 
+ */
+#define VERBOSE_FLAG 0x01 << 1
+/**
+ * Flag indicating the SOCK_SEQPACKET should be used. 
+ */
+#define SEQ_FLAG 0x01 << 2
+
+/**
+ * Flag indicating ECHO mode.
+ */
+#define ECHO_FLAG 0x01 << 3
+
+/**
+ * Flag indicating that hexdump should be printed of the data
+ * received/sent.
+ */
+#define XDUMP_FLAG 0x01 << 4
+
 
 flags_t set_flag( flags_t flags, flags_t set );
 int is_flag( flags_t flags, flags_t set );
