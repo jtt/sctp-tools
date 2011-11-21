@@ -352,10 +352,9 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                         fprintf(stderr, "Invalid input stream count given\n");
                                         return -1;
                                 }
-                                if (ctx->initmsg == NULL ) {
-                                        ctx->initmsg = mem_alloc( sizeof(struct sctp_initmsg));
-                                        memset( ctx->initmsg, 0, sizeof(struct sctp_initmsg));
-                                }
+                                if (ctx->initmsg == NULL )
+                                        ctx->initmsg = mem_zalloc( sizeof(struct sctp_initmsg));
+
                                 ctx->initmsg->sinit_max_instreams = streams;
                                 break;
                         case 'O' :
@@ -363,10 +362,9 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                         fprintf(stderr,"Invalid output stream count given\n");
                                         return -1;
                                 }
-                                if (ctx->initmsg == NULL) {
-                                        ctx->initmsg = mem_alloc(sizeof(*ctx->initmsg));
-                                        memset( ctx->initmsg,0,sizeof(*ctx->initmsg));
-                                }
+                                if (ctx->initmsg == NULL)
+                                        ctx->initmsg = mem_zalloc(sizeof(*ctx->initmsg));
+
                                 ctx->initmsg->sinit_num_ostreams = streams;
                                 break;
                         case 'L' :
