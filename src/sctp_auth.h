@@ -1,8 +1,7 @@
-/**
- * @file defs.h
- * @brief  File holding all system wide defines for the software.
+/*
+ * @file sctp_auth.h - Type definitions for SCTP authentication module.
  *
- * Copyright (c) 2008, J. Taimisto <jtaimisto@gmail.com>
+ * Copyright (c) 2009 - 2011, J. Taimisto <jtaimisto@gmail.com>
  * All rights reserved.
  *  
  * Redistribution and use in source and binary forms, with or without
@@ -16,10 +15,6 @@
  *       copyright notice, this list of conditions and the following
  *       disclaimer in the documentation and/or other materials
  *       provided with the distribution.
- *     - Neither the name of the author nor the names of its
- *       contributors may be used to endorse or promote products
- *       derived from this software without specific prior written
- *       permission.  
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -33,57 +28,29 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
  */
 
-#ifndef _DEFS_H_
-#define _DEFS_H_
-
-
-/*
-#define DEBUG 
-*/
-#define ENABLE_ASSERTIONS
-
-#define MEM_DBG_MAX_NR_ALLOC 500
-#define DEBUG_MEM 
-#define DEBUG_ENTER_EXIT 
-
-#define DEBUG_DEFAULT_LEVEL 0 /* TRACE */
-
-#define DBG_ERR_TO_STDOUT
-
-#define DPRINT_MODULE 
-#define DPRINT_STAMP
-
-#ifdef DPRINT_MODULE
+#ifndef _SCTP_AUTH_H_
+#define _SCTP_AUTH_H_
 
 /**
- * All modules configured.  Assign the correct module to DBG_MODULE_NAME with
- * define where applicable.  Add module info to dbg_modules array in debug.c.
- * This is the index of the module info in dbg_modules
+ * Structure holding information for one shared authentication key
  */
-enum dbg_module {
-        DBG_MODULE_MEM = 0,
-        DBG_MODULE_UTILS,
-        DBG_MODULE_CLIENT,
-        DBG_MODULE_SERVER,
-        DBG_MODULE_EVENTS,
-        DBG_MODULE_AUTH,
-        DBG_MODULE_COMMON,
-        DBG_MODULE_GENERIC /* this should always be the last */
+struct auth_keydata {
+        uint16_t auth_key_id; /**< ID of the key */
+        uint16_t auth_key_len; /**< Length of the keydata */
+        uint8_t *auth_key_data; /**< Keydata */
+        struct auth_keydata *next; /**< Next element on list */
 };
-#endif /* DPRINT_MODULE */
-/**
- * Maximum length for interface name 
- */
-#define IFNAMEMAX 20
 
 /**
- * Don't exit if accept() returns error
+ * Context holding information about SCTP authentication parameters.
  */
-/*
-#define IGNORE_ACCEPT_ERROR
-*/
-
-#endif /* _DEFS_H_ */
+struct auth_context {
+        uint16_t *auth_hmac_ids; /**< List of supported HMACS */
+        uint8_t auth_hmca_id_len; /** Number of HMAC identifiers */
+        uint8_t *auth_chunks; /**< Chunk types which need to be authenticated */
+        uint8_t auth_chunks_len; /**< Number of chunk types */
+        struct auth_keydata *auth_keys; /**< Linked list of shared keys */
+};
+#endif /* _SCTP_AUTH_H_ */

@@ -9,7 +9,7 @@ LFLAGS	= -lsctp
 endif
 
 
-COMMON_OBJS	= debug.o common.o
+COMMON_OBJS	= debug.o common.o sctp_auth.o
 CLIENT_OBJS	= $(COMMON_OBJS) sctp_client.o 
 CLIENT_NAME	= sctp-cli
 

@@ -1,8 +1,7 @@
 /**
- * @file defs.h
- * @brief  File holding all system wide defines for the software.
+ * @file sctp_auth.c - Module for handling SCTP authentication.
  *
- * Copyright (c) 2008, J. Taimisto <jtaimisto@gmail.com>
+ * Copyright (c) 2009 - 2011, J. Taimisto <jtaimisto@gmail.com>
  * All rights reserved.
  *  
  * Redistribution and use in source and binary forms, with or without
@@ -16,10 +15,6 @@
  *       copyright notice, this list of conditions and the following
  *       disclaimer in the documentation and/or other materials
  *       provided with the distribution.
- *     - Neither the name of the author nor the names of its
- *       contributors may be used to endorse or promote products
- *       derived from this software without specific prior written
- *       permission.  
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -33,57 +28,57 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
  */
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <errno.h>
+#include <string.h>
 
-#ifndef _DEFS_H_
-#define _DEFS_H_
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/sctp.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
 
-
-/*
-#define DEBUG 
-*/
-#define ENABLE_ASSERTIONS
-
-#define MEM_DBG_MAX_NR_ALLOC 500
-#define DEBUG_MEM 
-#define DEBUG_ENTER_EXIT 
-
-#define DEBUG_DEFAULT_LEVEL 0 /* TRACE */
-
-#define DBG_ERR_TO_STDOUT
-
-#define DPRINT_MODULE 
-#define DPRINT_STAMP
-
-#ifdef DPRINT_MODULE
+#define DBG_MODULE_NAME DBG_MODULE_AUTH
+#include "defs.h"
+#include "debug.h"
+#include "common.h"
+#include "sctp_auth.h"
 
 /**
- * All modules configured.  Assign the correct module to DBG_MODULE_NAME with
- * define where applicable.  Add module info to dbg_modules array in debug.c.
- * This is the index of the module info in dbg_modules
+ * Create new authentication context for holding authentication related
+ * information. 
+ * @return Pointer to the created authentication context
  */
-enum dbg_module {
-        DBG_MODULE_MEM = 0,
-        DBG_MODULE_UTILS,
-        DBG_MODULE_CLIENT,
-        DBG_MODULE_SERVER,
-        DBG_MODULE_EVENTS,
-        DBG_MODULE_AUTH,
-        DBG_MODULE_COMMON,
-        DBG_MODULE_GENERIC /* this should always be the last */
-};
-#endif /* DPRINT_MODULE */
-/**
- * Maximum length for interface name 
- */
-#define IFNAMEMAX 20
+struct auth_context *auth_create_context() 
+{
+        struct auth_context *ret; 
+
+        ret = mem_zalloc(sizeof(*ret));
+        return ret;
+}
 
 /**
- * Don't exit if accept() returns error
+ * Delete the authentication context.
+ * Deletes also all the keys stored to the context.
+ * @param actx Pointer to the context to delete.
  */
-/*
-#define IGNORE_ACCEPT_ERROR
-*/
+void auth_delete_context(struct auth_context *actx)
+{
+        struct auth_keydata *key, *next_key;
 
-#endif /* _DEFS_H_ */
+        if (actx == NULL)
+                return;
+
+        key = actx->auth_keys;
+        while( key != NULL) {
+                next_key = key->next;
+                mem_free(key);
+                key = next_key;
+        }
+
+        mem_free(actx);
+}
