@@ -117,7 +117,7 @@ struct dbg_module_info dbg_modules[] = {
         {"CLIENT",DEBUG_DEFAULT_LEVEL},
         {"SERVER",DEBUG_DEFAULT_LEVEL},
         {"EVENTS",DEBUG_DEFAULT_LEVEL},
-        {"AUTH",DEBUG_LEVEL_DEFAULT},
+        {"AUTH",DEBUG_DEFAULT_LEVEL},
         {"COMMON",DEBUG_DEFAULT_LEVEL},
         {"GENERIC",DEBUG_DEFAULT_LEVEL},
 };

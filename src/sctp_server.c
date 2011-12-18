@@ -55,13 +55,14 @@
 #include "debug.h"
 #include "common.h"
 #include "sctp_events.h"
+#include "sctp_auth.h"
 
 #define DEFAULT_PORT 2001
 #define DEFAULT_BACKLOG 2
 
 #define RECVBUF_SIZE 1024
 
-#define PROG_VERSION "0.0.3"
+#define PROG_VERSION "0.0.3-auth"
 
 /**
  * Number of milliseconds to wait on select() before checking if user has
@@ -94,6 +95,7 @@ struct server_ctx {
         struct partial_store partial; /**< partial datagrams collected here */
         flags_t options;/**< Operation flags */
         struct sctp_initmsg *initmsg; /**< association parameters, if set */
+        struct auth_context *actx;/**< Authentication parameters */
 };
 
 /**
@@ -315,6 +317,7 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
         uint16_t debug_level = DEBUG_DEFAULT_LEVEL;
 #endif /* DEBUG */
         uint16_t streams;
+        auth_ret_t auth_ret;
         struct option long_options[] = {
                 { "port", 1, 0, 'p' },
                 { "help", 0,0, 'H' },
@@ -325,6 +328,10 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
                 { "instreams", 1,0, 'I' },
                 { "outstreams", 1,0,'O' },
                 { "xdump", 0,0,'x' },
+                { "auth-key",1,0,'A'},
+                { "auth-hmac",1,0,'M'},
+                { "auth-chunk",1,0,'C'},
+
 #ifdef DEBUG
                 { "debug",1,0,'D'},
 #endif /* DEBUG */
@@ -333,7 +340,7 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
 
         while (1) {
 
-                c = getopt_long( argc, argv, "p:b:HsxevI:O:D:", long_options, &option_index );
+                c = getopt_long( argc, argv, "p:b:HsxevI:O:D:A:M:C:", long_options, &option_index );
                 if ( c == -1 )
                         break;
 
@@ -381,6 +388,47 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
                                         ctx->initmsg = mem_zalloc(sizeof(*ctx->initmsg));
 
                                 ctx->initmsg->sinit_num_ostreams = streams;
+                                break;
+                        case 'A' :
+                                if (ctx->actx == NULL) {
+                                        ctx->actx = auth_create_context();
+                                        ctx->options = set_flag(ctx->options, AUTH_FLAG);
+                                }
+                                auth_ret = auth_parse_key(ctx->actx, optarg);
+                                if (auth_ret == AUTHERR_INVALID_PARAM) {
+                                        fprintf(stderr,"Invalid key given\n");
+                                        return -1;
+                                }
+                                break;
+                        case 'C' :
+                                if (ctx->actx == NULL) {
+                                        ctx->actx = auth_create_context();
+                                        ctx->options = set_flag(ctx->options, AUTH_FLAG);
+                                }
+                                auth_ret = auth_parse_chunk(ctx->actx, optarg);
+                                if (auth_ret == AUTHERR_INVALID_PARAM) {
+                                        fprintf(stderr,"Invalid chunk type given\n");
+                                        return -1;
+                                } else if (auth_ret == AUTHERR_UNSUPPORTED_PARAM) {
+                                        fprintf(stderr, "Authenticating chunks of type %s not supported\n",
+                                                        optarg);
+                                        return -1;
+                                }
+                                break;
+                        case 'M' :
+                                if (ctx->actx == NULL) {
+                                        ctx->actx = auth_create_context();
+                                        ctx->options = set_flag(ctx->options, AUTH_FLAG);
+                                }
+                                auth_ret = auth_parse_hmac(ctx->actx, optarg);
+                                if (auth_ret == AUTHERR_INVALID_PARAM) {
+                                        fprintf(stderr,"Invalid hmac type given\n");
+                                        return -1;
+                                } else if (auth_ret == AUTHERR_UNSUPPORTED_PARAM) {
+                                        fprintf(stderr, "HMAC %s is not supported\n",
+                                                        optarg);
+                                        return -1;
+                                }
                                 break;
 #ifdef DEBUG
                         case 'D' :
@@ -467,6 +515,18 @@ int main( int argc, char *argv[] )
                                         strerror(errno));
                 }
         }
+        if (is_flag(ctx.options, AUTH_FLAG)) {
+                        ASSERT(ctx.actx != NULL);
+                        if (!AUTHCTX_HAS_KEY(ctx.actx)) {
+                                fprintf(stderr,"No authentication key set\n");
+                                goto out;
+                        }
+                        if (auth_set_params(ctx.sock, ctx.actx) != AUTHERR_OK) {
+                                fprintf(stderr,"Unable to set authentication parameters\n");
+                                goto out;
+                        }
+        }
+
 
         if ( bind_and_listen( &ctx ) < 0 ) {
                 fprintf(stderr, "Error while initializing the server\n" );
@@ -520,10 +580,14 @@ int main( int argc, char *argv[] )
                         close( cli_fd );
                 }
         }
-        mem_free( ctx.recvbuf);
-        if (ctx.initmsg != NULL ) {
+out :
+        if (ctx.recvbuf != NULL)
+                mem_free( ctx.recvbuf);
+        if (ctx.initmsg != NULL )
                 mem_free( ctx.initmsg);
-        }
+        if (ctx.actx != NULL)
+                auth_delete_context(ctx.actx);
+
         close( ctx.sock );
 
         return EXIT_SUCCESS;

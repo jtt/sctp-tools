@@ -47,10 +47,71 @@ struct auth_keydata {
  * Context holding information about SCTP authentication parameters.
  */
 struct auth_context {
-        uint16_t *auth_hmac_ids; /**< List of supported HMACS */
-        uint8_t auth_hmca_id_len; /** Number of HMAC identifiers */
-        uint8_t *auth_chunks; /**< Chunk types which need to be authenticated */
-        uint8_t auth_chunks_len; /**< Number of chunk types */
+        uint16_t auth_hmac_id; /**< HMAC algorithm used */ 
+        uint8_t auth_chunk; /**< Chunk type which need to be authenticated */
         struct auth_keydata *auth_keys; /**< Linked list of shared keys */
 };
+
+/**
+ * Return values for functions parsing authentication parameters from strings.
+ */
+enum autherr {
+        AUTHERR_OK,
+        AUTHERR_INVALID_PARAM, /**< Invalid, malformed parameter */
+        AUTHERR_UNSUPPORTED_PARAM /**< Valid, but not supported parameter */
+};
+
+/**
+ * Chunk type for data chunk, used when requesting chunks to be authenticated.
+ */
+#define AUTH_CHUNK_DATA 1
+/**
+ * Chunk type for heartbeat chunk, used when requesting chunks to be authenticated.
+ */
+#define AUTH_CHUNK_HEARBEAT 2
+
+/**
+ * No HMAC algorithm set, use the default one.
+ */
+#define AUTH_HMAC_NOT_SET 0xffff
+
+/**
+ * Default chunk type which will be authenticated if no parameter for chunk
+ * type is given on command line and authentication is enabled.
+ */
+#define AUTH_DEFAULT_CHUNK AUTH_CHUNK_DATA
+/**
+ * Default HMAC algorithm for authentication if no parameter for HMAC
+ * algorithm is given on command line and authentication is enabled.
+ */
+#define AUTH_DEFAULT_HMAC AUTH_HMAC_NOT_SET
+
+/**
+ * Default ID for a key if no key ID is given
+ */
+#define AUTH_DEFAULT_KEY_ID 0x01
+
+/**
+ * Check if key for authentication is given
+ */
+#define AUTHCTX_HAS_KEY(c)((c)->auth_keys != NULL)
+
+/**
+ * Return type for parsing functions
+ */
+typedef enum autherr auth_ret_t;
+
+/* FUNCTION PROTOTYPES */
+
+struct auth_context *auth_create_context();
+void auth_delete_context(struct auth_context *actx);
+
+auth_ret_t auth_parse_hmac(struct auth_context *actx, char *str);
+auth_ret_t auth_parse_chunk(struct auth_context *actx, char *str);
+auth_ret_t auth_parse_key(struct auth_context *actx, char *str);
+
+auth_ret_t auth_set_params(int sock, struct auth_context *actx);
+#ifdef DEBUG
+void debug_auth_context(struct auth_context *actx);
+#endif 
 #endif /* _SCTP_AUTH_H_ */

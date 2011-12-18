@@ -81,6 +81,12 @@ typedef uint16_t flags_t;
  */
 #define XDUMP_FLAG 0x01 << 4
 
+/**
+ * Flag indicating that AUTH parameters should be set for 
+ * the connection(s)
+ */
+#define AUTH_FLAG 0x01 << 5
+
 
 flags_t set_flag( flags_t flags, flags_t set );
 int is_flag( flags_t flags, flags_t set );

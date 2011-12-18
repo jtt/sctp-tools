@@ -58,6 +58,8 @@ struct auth_context *auth_create_context()
         struct auth_context *ret; 
 
         ret = mem_zalloc(sizeof(*ret));
+        ret->auth_hmac_id = AUTH_DEFAULT_HMAC;
+        ret->auth_chunk = AUTH_DEFAULT_CHUNK;
         return ret;
 }
 
@@ -82,3 +84,342 @@ void auth_delete_context(struct auth_context *actx)
 
         mem_free(actx);
 }
+
+struct ident_entry {
+        char *name;
+        uint16_t ident;
+};
+
+/**
+ * Table for supported HMAC algorithms
+ */
+static struct ident_entry supported_hmac[] = {
+        { "sha1", SCTP_AUTH_HMAC_ID_SHA1 },
+        {"sha256", SCTP_AUTH_HMAC_ID_SHA256} 
+};
+
+/**
+ * Table for supported chunks types for which authentication 
+ * can be requestes.
+ */
+static struct ident_entry supported_chunk[] = {
+        { "data", AUTH_CHUNK_DATA },
+        { "heartbeat", AUTH_CHUNK_HEARBEAT }
+};
+
+
+/**
+ * Number of supported HMAC algorithms.
+ */
+#define NUM_OF_HMAC_ALG 2
+/**
+ * Number of supported chunks for which authentication 
+ * can be turned on.
+ */
+#define NUM_OF_CHUNK_TYPES 2
+
+
+/**
+ * Parse used HMAC algorithm from given string. String should contain the name
+ * of hmac algorithm to use. The parsed algorithm is set into 
+ * the given authentication context.
+ * @param actx Pointer to authentication context
+ * @param str Pointer to string containing the algorithm name.
+ * @return AUTHERR_OK if string contained name of supported algorithm, 
+ * AUTHERR_UNSUPPORTED_PARAM if not. 
+ */
+auth_ret_t auth_parse_hmac(struct auth_context *actx, char *str)
+{
+        int i;
+
+        for (i = 0; i < NUM_OF_HMAC_ALG; i++) {
+                if (!strcmp(str,supported_hmac[i].name)) {
+                        actx->auth_hmac_id = supported_hmac[i].ident;
+                        return AUTHERR_OK;
+                }
+        }
+
+        return AUTHERR_UNSUPPORTED_PARAM;
+}
+
+/**
+ * Parse chunk type for which authentication should be turned on.
+ * The parsed chunk type is set into the given authentication context.
+ * @param actx Pointer to the authentication context.
+ * @param str String containing the name of the chunk.
+ * @param AUTHERR_OK if the chunk type was parsed, AUTHERR_UNSUPPORTED_PARAM 
+ * if string did not contain any supported chunk type.
+ */
+auth_ret_t auth_parse_chunk(struct auth_context *actx, char *str)
+{
+        int i;
+
+        for (i = 0; i < NUM_OF_CHUNK_TYPES; i++) {
+                if (!strcmp(str,supported_chunk[i].name)) {
+                        actx->auth_chunk = supported_chunk[i].ident;
+                        return AUTHERR_OK;
+                }
+        }
+        return AUTHERR_UNSUPPORTED_PARAM;
+}
+
+/**
+ * Separator for key id and key data
+ */
+#define KEY_ID_SEP ':'
+
+/**
+ * Create byte array from hexadecimal string. 
+ * @param str Pointer to the string.
+ * @param buf Pointer to a buffer where the data should be stored. 
+ * @param buflen Length for the data buffer.
+ * @return -1 if string contained illegal charactes of if the buffer did not
+ * contain enough room for data.
+ */
+static int str_to_bytearray(const char *str, uint8_t *buf, int buflen)
+{
+        int len = strlen(str), blen,hi;
+        const char *p;
+        uint8_t *b;
+
+        blen = len / 2;
+        if (len % 2 != 0)
+                blen++;
+
+        if (buflen < blen)
+                return -1;
+
+        memset(buf,0,buflen);
+
+        p = str; 
+        b = buf;
+        hi = 1;
+        if (len %2 != 0) {
+                /* Odd number of characters on the string, fill with zero.*/
+                hi = 0;
+        }
+
+        while( *p != '\0') {
+                if ( *p >= '0' && *p <= '9')
+                        *b |= *p - '0';
+                else if (*p >= 'a' && *p <= 'f')
+                        *b |= *p - 'a' +10;
+                else if ( *p >= 'A' && *p <= 'F')
+                        *b |= *p - 'A' + 10;
+                else
+                        return -1;
+
+                if (hi) {
+                        *b = *b << 4;
+                        hi = 0;
+                } else {
+                        b++;
+                        hi = 1;
+                }
+
+                p++;
+        }
+        return 0;
+}
+
+/**
+ * Parse an authentication key from given string. The format of the key is :
+ * 
+ * [<id>:][0x]<key-data>
+ *
+ * Where <id> is optional ID for the key (if no id is given 1 is used), if the
+ * key-data is prefixed by 0x the the rest of the string is treated as the raw
+ * key data bytes in hex. If no 0x is present, then the rest of the string is
+ * taken as is (the trailing '\0' is not considered to be a part of the key.
+ *
+ * @param actx Pointer to the context where to add the key.
+ * @param str Pointer to the string containing the key.
+ * @return AUTHERR_OK if key was parsed succesfully, 
+ * AUTHERR_INVALID_PARAM if key could not be parsed. 
+ */
+auth_ret_t auth_parse_key(struct auth_context *actx, char *str)
+{
+        struct auth_keydata *key;
+        char *p;
+        int len, has_id = 0;
+        uint16_t id;
+
+        p = strchr(str, KEY_ID_SEP);
+        if (p != NULL) {
+                /* parse the key ID first */
+                *p = '\0';
+                if (parse_uint16(str,&id) != 0)
+                        return AUTHERR_INVALID_PARAM;
+                has_id = 1;
+                *p = KEY_ID_SEP;
+                str = p+1;
+                if (*str == '\0') 
+                        return AUTHERR_INVALID_PARAM;
+        }
+        len = strlen(str);
+        if (!len)
+                return AUTHERR_INVALID_PARAM;
+
+        key = mem_zalloc(sizeof(*key));
+        if (has_id)
+                key->auth_key_id = id;
+        else 
+                key->auth_key_id = AUTH_DEFAULT_KEY_ID;
+
+        if (len > 2 && *str == '0' && *(str+1) == 'x') {
+                str = str+2;
+                len -= 2;
+
+                if (len % 2)
+                        key->auth_key_len = (len/2)+1;
+                else
+                        key->auth_key_len = len/2;
+
+                key->auth_key_data = mem_alloc(key->auth_key_len);
+                if (str_to_bytearray(str,key->auth_key_data,key->auth_key_len)) {
+                        mem_free(key->auth_key_data);
+                        mem_free(key);
+                        return AUTHERR_INVALID_PARAM;
+                }
+        } else {
+                /* just copy the raw string, NOT including the trailing '\0' */
+                key->auth_key_len = len;
+                key->auth_key_data = mem_alloc(key->auth_key_len);
+                memcpy(key->auth_key_data, str,len);
+        }
+        actx->auth_keys = key;
+
+        return AUTHERR_OK;
+}
+
+/**
+ * Set the given HMAC algorithm(s) to be used. 
+ * @param sock Socket for which the socket option shoud be set.
+ * @param actx Pointer to the auth_context containing the HMAC parameters to set.
+ * @return 0 on success, -1 if HMAC could not be set. 
+ */
+static int set_hmac(int sock, struct auth_context *actx)
+{
+        struct sctp_hmacalgo *hmac;
+        int idlen = 1, struct_sz;
+        int ret = 0;
+
+        if (actx->auth_hmac_id != SCTP_AUTH_HMAC_ID_SHA1) 
+                idlen = 2;
+
+        struct_sz = sizeof(struct sctp_hmacalgo) + idlen*sizeof(uint16_t);
+        hmac = mem_zalloc(struct_sz);
+
+        /* SHA1 needs to be present always */
+        if (idlen == 2) 
+                hmac->shmac_idents[1] = SCTP_AUTH_HMAC_ID_SHA1;
+        hmac->shmac_idents[0] = actx->auth_hmac_id;
+        hmac->shmac_number_of_idents = idlen;
+
+        TRACE("Setting %d HMAC ident(s)\n", hmac->shmac_number_of_idents);
+
+        if (setsockopt(sock, SOL_SCTP,SCTP_HMAC_IDENT, 
+                                hmac, struct_sz) != 0) {
+                ERROR("Unable to set HMAC_IDENT : %s\n", strerror(errno));
+                ret = -1;
+        }
+        mem_free(hmac);
+        return ret;
+}
+
+/**
+ * Set the chunks which should be authenticated.
+ * @param sock Socket for which the socket option will be set.
+ * @param actx Pointer to the authentication contect containing the chunks requiring authentication.
+ * @return 0 on success, -1 on error.
+ */
+static int set_chunks(int sock, struct auth_context *actx)
+{
+        struct sctp_authchunk chunks;
+        int ret = 0;
+
+        memset(&chunks, 0, sizeof(chunks));
+
+        /* XXX : we support setting only one chunk type */
+        chunks.sauth_chunk = htons(actx->auth_chunk);
+
+        TRACE("Adding chunk type %d to be authenticated\n",
+                        chunks.sauth_chunk);
+
+        if (setsockopt(sock, SOL_SCTP,SCTP_AUTH_CHUNK,
+                                &chunks, sizeof(chunks)) != 0) {
+                ERROR("Unable to set AUTH_CHUNK : %s \n", strerror(errno));
+                ret = -1;
+        }
+        return ret;
+}
+
+/**
+ * Add a key to the set of authentication keys.
+ * @param sock The socket for which the socket option will be set.
+ * @param key Pointer to the key data.
+ * @return 0 on success, -1 on failure.
+ */
+static int set_key(int sock, struct auth_keydata *key)
+{
+        struct sctp_authkey *sca;
+        int ret = 0, struct_sz;
+
+        struct_sz = sizeof(*sca) + key->auth_key_len * sizeof(uint8_t);
+        sca = mem_zalloc(struct_sz);
+
+        sca->sca_keynumber = key->auth_key_id;
+        sca->sca_keylength = key->auth_key_len;
+        memcpy(sca->sca_key, key->auth_key_data, key->auth_key_len);
+
+        TRACE("Adding key (id:%d;len:%d bytes)\n", sca->sca_keynumber, sca->sca_keylength);
+        if (setsockopt(sock, SOL_SCTP, SCTP_AUTH_KEY, sca, 
+                                struct_sz) != 0) {
+                ERROR("Unable to set AUTH_KEY : %s \n", strerror(errno));
+                ret = -1;
+        }
+        return ret;
+}
+
+/**
+ * Set all the authentication parameters. 
+ * @param sock Pointer to the socket for which the socket options will be set.
+ * @param actx Pointer to the authentication context containing the necessary
+ * parameters.
+ * @return AUTHERR_OK on success, AUTHERR_INVALID_PARAM in case of failure.
+ */
+auth_ret_t auth_set_params(int sock, struct auth_context *actx)
+{
+        struct auth_keydata *key;
+
+        if (actx->auth_hmac_id != AUTH_HMAC_NOT_SET) {
+                if (set_hmac(sock, actx) != 0)
+                        return AUTHERR_INVALID_PARAM;
+        }
+
+        if (set_chunks(sock,actx) != 0)
+                return AUTHERR_INVALID_PARAM;
+
+        key = actx->auth_keys;
+        while (key != NULL) {
+                if (set_key(sock, key) != 0)
+                        return AUTHERR_INVALID_PARAM;
+                key = key->next;
+        }
+
+        return AUTHERR_OK;
+}
+
+#ifdef DEBUG
+void debug_auth_context(struct auth_context *actx)
+{
+        struct auth_keydata *key;
+        DBG("AUTH: hmac %d / chunk %d\n", actx->auth_hmac_id, actx->auth_chunk);
+        key = actx->auth_keys;
+        while (key != NULL) {
+                DBG("AUTH-KEY: id %d\n",key->auth_key_id);
+                DEBUG_XDUMP(key->auth_key_data, key->auth_key_len, "Key data");
+                key = key->next;
+        }
+}
+#endif /* DEBUG */
