@@ -360,7 +360,7 @@ static int set_chunks(int sock, struct auth_context *actx)
  * @param key Pointer to the key data.
  * @return 0 on success, -1 on failure.
  */
-static int set_key(int sock, struct auth_keydata *key)
+static int add_key(int sock, struct auth_keydata *key)
 {
         struct sctp_authkey *sca;
         int ret = 0, struct_sz;
@@ -376,6 +376,32 @@ static int set_key(int sock, struct auth_keydata *key)
         if (setsockopt(sock, SOL_SCTP, SCTP_AUTH_KEY, sca, 
                                 struct_sz) != 0) {
                 ERROR("Unable to set AUTH_KEY : %s \n", strerror(errno));
+                ret = -1;
+        }
+        return ret;
+}
+
+/**
+ * Set given key as active for this and future associations.
+ * The key should have been added with add_key() prior to calling this
+ * function.
+ * @param sock Socket for which the socket option should be set.
+ * @param key Pointer to the key which should be set as active
+ * @return 0 if operation succeeded, -1 if not.
+ */
+static int set_active_key(int sock, struct auth_keydata *key)
+{
+        struct sctp_authkeyid scact;
+        int ret = 0;
+
+        memset(&scact, 0, sizeof(scact));
+        scact.scact_assoc_id = 0;
+        scact.scact_keynumber = key->auth_key_id;
+
+        TRACE("Setting key %d as active\n", scact.scact_keynumber);
+        if (setsockopt(sock, SOL_SCTP, SCTP_AUTH_ACTIVE_KEY,
+                                &scact, sizeof(scact)) != 0) {
+                ERROR("Unable to set active key : %s \n", strerror(errno));
                 ret = -1;
         }
         return ret;
@@ -402,9 +428,15 @@ auth_ret_t auth_set_params(int sock, struct auth_context *actx)
 
         key = actx->auth_keys;
         while (key != NULL) {
-                if (set_key(sock, key) != 0)
+                if (add_key(sock, key) != 0)
                         return AUTHERR_INVALID_PARAM;
                 key = key->next;
+        }
+        /* XXX - Set the first key as active */
+        if (actx->auth_keys != NULL) {
+                if (set_active_key(sock, actx->auth_keys) != 0) {
+                        return AUTHERR_INVALID_PARAM;
+                }
         }
 
         return AUTHERR_OK;
