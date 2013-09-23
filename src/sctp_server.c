@@ -302,11 +302,16 @@ static void print_usage()
         printf("\t--echo         : Echo the received data back to sender\n");
         printf("\t--verbose      : Be more verbosive \n");
         printf("\t--xdump        : Print hexdump of received data \n");
-        printf("\t--instreams       : Maximum number of input streams to negotiate for the association\n");
-        printf("\t--outstreams      : Number of output streams to negotiate\n");
+        printf("\t--instreams    : Maximum number of input streams to negotiate for the association\n");
+        printf("\t--outstreams   : Number of output streams to negotiate\n");
         printf("\t--help         : Print this message \n");
+        printf("\t--auth-hmac    : Select the hmac algorithm to use (sha1 or sha256)\n");
+        printf("\t--auth-chunk   : Select the chunk to authenticate\n");
+        printf("\t                 (currently supports only \"data\" or \"heartbeat\")\n");
+        printf("\t--auth-key     : Set the authentication key (format: [<id>:]0x<key-data>)\n");
+        printf("\t                 The <id> is optional keyid.\n");
 #ifdef DEBUG
-        printf("\t--debug <level>   : Set the debug level to <level> (0-3, 0=TRACE)\n");
+        printf("\t--debug <level>: Set the debug level to <level> (0-3, 0=TRACE)\n");
 #endif /* DEBUG */
 }  
 

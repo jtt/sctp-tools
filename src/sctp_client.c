@@ -250,6 +250,11 @@ static void print_usage()
         printf("\t--instreams       : Maximum number of input streams to negotiate for the association\n");
         printf("\t--outstreams      : Number of output streams to negotiate\n");
         printf("\t--help            : Print this message \n");
+        printf("\t--auth-hmac       : Select the hmac algorithm to use (sha1 or sha256)\n");
+        printf("\t--auth-chunk      : Select the chunk to authenticate\n");
+        printf("\t                    (currently supports only \"data\" or \"heartbeat\")\n");
+        printf("\t--auth-key        : Set the authentication key (format: [<id>:]0x<key-data>)\n");
+        printf("\t                    The <id> is optional keyid.\n");
 #ifdef DEBUG
         printf("\t--debug <level>   : Set the debug level to <level> (0-3, 0=TRACE)\n");
 #endif /* DEBUG */
@@ -583,7 +588,9 @@ int main( int argc, char *argv[] )
         }
         if (is_flag(ctx.options, AUTH_FLAG)) {
                 ASSERT(ctx.actx != NULL);
+#ifdef DEBUG
                 debug_auth_context(ctx.actx);
+#endif /* DEBUG */
                 if (!AUTHCTX_HAS_KEY(ctx.actx)) {
                         fprintf(stderr,"No Authentication key set\n");
                         goto out;
