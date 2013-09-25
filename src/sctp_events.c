@@ -115,6 +115,41 @@ static void verbose_send_failed_event( struct sctp_send_failed *ssf)
 }
 
 /**
+ * Print verbose information about incoming SCTP_AUTHKEY_EVENT.
+ * @param sae The event data
+ */
+static void verbose_auth_event(struct sctp_authkey_event *sae)
+{
+        printf("##AUTHENTICATION_EVENT for association %d\n", sae->auth_assoc_id);
+        printf("##Key %d ", sae->auth_keynumber);
+        switch(sae->auth_indication) {
+                case SCTP_AUTH_NEWKEY :
+                        printf(" has been made active\n");
+                        break;
+/* No support for these in Linux */
+#if 0
+                case SCTP_AUTH_NO_AUTH :
+                        printf(" - Peer does not support authentication\n");
+                        break;
+                case SCTP_AUTH_FREE_KEY :
+                        printf(" no longer used\n");
+                        break;
+#endif
+                default :
+                        printf(" - Unknown indication 0x%.8x\n",
+                                        sae->auth_indication);
+                        break;
+        }
+}
+
+#ifndef SCTP_AUTHENTICATION_EVENT
+/* for some reason /usr/include/netinet/sctp.h has _INDICATION
+ * instead of _EVENT.  The struct is same, though
+ */
+#define SCTP_AUTHENTICATION_EVENT SCTP_AUTHENTICATION_INDICATION
+#endif /* no SCTP_AUTHENTICATION_EVENT */
+
+/**
  * Handle incoming SCTP ancillary event. 
  *
  * @param data The event as it was received from socket.
@@ -133,6 +168,9 @@ int handle_event( uint8_t *data )
                         break;
                 case SCTP_SEND_FAILED :
                         verbose_send_failed_event(&(not->sn_send_failed));
+                        break;
+                case SCTP_AUTHENTICATION_EVENT :
+                        verbose_auth_event(&(not->sn_authkey_event));
                         break;
                 default :
                         TRACE("Discarding event with unknown type %d \n",
