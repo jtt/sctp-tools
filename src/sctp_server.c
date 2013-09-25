@@ -306,8 +306,10 @@ static void print_usage()
         printf("\t--outstreams   : Number of output streams to negotiate\n");
         printf("\t--help         : Print this message \n");
         printf("\t--auth-hmac    : Select the hmac algorithm to use (sha1 or sha256)\n");
-        printf("\t--auth-chunk   : Select the chunk to authenticate\n");
-        printf("\t                 (currently supports only \"data\" or \"heartbeat\")\n");
+        printf("\t--auth-chunk   : Select the chunk(s) to authenticate (comma separated list of chunks)\n");
+        printf("\tsupported chunks: ");
+        auth_print_supported_chunks(stdout);
+        printf("\n");
         printf("\t--auth-key     : Set the authentication key (format: [<id>:]0x<key-data>)\n");
         printf("\t                 The <id> is optional keyid.\n");
 #ifdef DEBUG
@@ -415,8 +417,7 @@ static int parse_args( int argc, char **argv, struct server_ctx *ctx )
                                         fprintf(stderr,"Invalid chunk type given\n");
                                         return -1;
                                 } else if (auth_ret == AUTHERR_UNSUPPORTED_PARAM) {
-                                        fprintf(stderr, "Authenticating chunks of type %s not supported\n",
-                                                        optarg);
+                                        fprintf(stderr, "Given chunk type not supported for authentication\n");
                                         return -1;
                                 }
                                 break;

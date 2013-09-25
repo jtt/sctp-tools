@@ -48,7 +48,7 @@ struct auth_keydata {
  */
 struct auth_context {
         uint16_t auth_hmac_id; /**< HMAC algorithm used */ 
-        uint8_t auth_chunk; /**< Chunk type which need to be authenticated */
+        flags_t auth_chunks; /**< chunks to authenticate, bitmask */
         struct auth_keydata *auth_keys; /**< Linked list of shared keys */
 };
 
@@ -61,14 +61,49 @@ enum autherr {
         AUTHERR_UNSUPPORTED_PARAM /**< Valid, but not supported parameter */
 };
 
-/**
- * Chunk type for data chunk, used when requesting chunks to be authenticated.
- */
-#define AUTH_CHUNK_DATA 1
-/**
- * Chunk type for heartbeat chunk, used when requesting chunks to be authenticated.
- */
-#define AUTH_CHUNK_HEARBEAT 2
+enum auth_chunks {
+        AUTH_CHUNK_DATA =           0x0001,
+        AUTH_CHUNK_SACK =           0x0002,
+        AUTH_CHUNK_HEARTBEAT =      0x0004,
+        AUTH_CHUNK_HEARTBEAT_ACK =  0x0008,
+        AUTH_CHUNK_ABORT =          0x0010,
+        AUTH_CHUNK_SHUTDOWN =       0x0020,
+        AUTH_CHUNK_ERROR =          0x0040,
+        AUTH_CHUNK_COOKIE_ECHO =    0x0080,
+        AUTH_CHUNK_COOKIE_ACK =     0x0100,
+        AUTH_CHUNK_ASCONF=          0x0200,
+        AUTH_CHUNK_ASCONF_ACK=      0x0400,
+        AUTH_CHUNK_RECONFIG=        0x0800,
+        AUTH_CHUNK_PAD=             0x1000,
+        AUTH_CHUNK_FTSN=            0x2000,
+        AUTH_CHUNK_PKTDROP=         0x4000
+
+};
+
+/* definitions for SCTP chunk types */
+#define CHUNK_TYPE_DATA  0x00
+#define CHUNK_TYPE_INIT  0x01
+#define CHUNK_TYPE_INIT_ACK  0x02
+#define CHUNK_TYPE_SACK  0x03
+#define CHUNK_TYPE_HEARTBEAT  0x04
+#define CHUNK_TYPE_HEARTBEAT_ACK  0x05
+#define CHUNK_TYPE_ABORT  0x06
+#define CHUNK_TYPE_SHUTDOWN  0x07
+#define CHUNK_TYPE_SHUTDOWN_ACK  0x08
+#define CHUNK_TYPE_ERROR  0x09
+#define CHUNK_TYPE_COOKIE_ECHO  0x0a
+#define CHUNK_TYPE_COOKIE_ACK  0x0b
+#define CHUNK_TYPE_ECNE  0x0c
+#define CHUNK_TYPE_CWR  0x0d
+#define CHUNK_TYPE_SHUTDOWN_COMPLETE  0x0e
+#define CHUNK_TYPE_AUTH  0x0f
+#define CHUNK_TYPE_ASCONF_ACK  0x80
+#define CHUNK_TYPE_PKTDROP  0x81
+#define CHUNK_TYPE_RECONFIG  0x82
+#define CHUNK_TYPE_PAD  0x84
+#define CHUNK_TYPE_FTSN  0xc0
+#define CHUNK_TYPE_ASCONF  0xc1
+
 
 /**
  * No HMAC algorithm set, use the default one.
@@ -111,6 +146,8 @@ auth_ret_t auth_parse_chunk(struct auth_context *actx, char *str);
 auth_ret_t auth_parse_key(struct auth_context *actx, char *str);
 
 auth_ret_t auth_set_params(int sock, struct auth_context *actx);
+void auth_print_supported_chunks(FILE *f);
+
 #ifdef DEBUG
 void debug_auth_context(struct auth_context *actx);
 #endif 

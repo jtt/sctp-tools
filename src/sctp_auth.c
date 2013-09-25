@@ -59,7 +59,7 @@ struct auth_context *auth_create_context()
 
         ret = mem_zalloc(sizeof(*ret));
         ret->auth_hmac_id = AUTH_DEFAULT_HMAC;
-        ret->auth_chunk = AUTH_DEFAULT_CHUNK;
+        ret->auth_chunks = 0x00;
         return ret;
 }
 
@@ -87,15 +87,16 @@ void auth_delete_context(struct auth_context *actx)
 
 struct ident_entry {
         char *name;
-        uint16_t ident;
+        uint8_t ident;
+        flags_t flag;
 };
 
 /**
  * Table for supported HMAC algorithms
  */
 static struct ident_entry supported_hmac[] = {
-        { "sha1", SCTP_AUTH_HMAC_ID_SHA1 },
-        {"sha256", SCTP_AUTH_HMAC_ID_SHA256} 
+        { "sha1", SCTP_AUTH_HMAC_ID_SHA1, 0 },
+        {"sha256", SCTP_AUTH_HMAC_ID_SHA256, 0}
 };
 
 /**
@@ -103,8 +104,21 @@ static struct ident_entry supported_hmac[] = {
  * can be requestes.
  */
 static struct ident_entry supported_chunk[] = {
-        { "data", AUTH_CHUNK_DATA },
-        { "heartbeat", AUTH_CHUNK_HEARBEAT }
+        { "data",CHUNK_TYPE_DATA, AUTH_CHUNK_DATA },
+        { "sack",CHUNK_TYPE_SACK, AUTH_CHUNK_SACK },
+        { "heartbeat",CHUNK_TYPE_HEARTBEAT,AUTH_CHUNK_HEARTBEAT},
+        { "heartbeat-ack", CHUNK_TYPE_HEARTBEAT_ACK,AUTH_CHUNK_HEARTBEAT_ACK},
+        { "abort", CHUNK_TYPE_ABORT, AUTH_CHUNK_ABORT},
+        { "shutdown", CHUNK_TYPE_SHUTDOWN, AUTH_CHUNK_SHUTDOWN},
+        { "error", CHUNK_TYPE_ERROR, AUTH_CHUNK_ERROR},
+        { "cookie-echo", CHUNK_TYPE_COOKIE_ECHO,AUTH_CHUNK_COOKIE_ECHO},
+        { "cookie-ack", CHUNK_TYPE_COOKIE_ACK,AUTH_CHUNK_COOKIE_ACK},
+        { "asconf", CHUNK_TYPE_ASCONF,AUTH_CHUNK_ASCONF},
+        { "asconf-ack", CHUNK_TYPE_ASCONF_ACK, AUTH_CHUNK_ASCONF_ACK},
+        { "reconfig", CHUNK_TYPE_RECONFIG, AUTH_CHUNK_RECONFIG},
+        { "pad", CHUNK_TYPE_PAD, AUTH_CHUNK_PAD},
+        { "ftsn", CHUNK_TYPE_FTSN, AUTH_CHUNK_FTSN},
+        { "pktdrop", CHUNK_TYPE_PKTDROP, AUTH_CHUNK_PKTDROP}
 };
 
 
@@ -116,7 +130,7 @@ static struct ident_entry supported_chunk[] = {
  * Number of supported chunks for which authentication 
  * can be turned on.
  */
-#define NUM_OF_CHUNK_TYPES 2
+#define NUM_OF_CHUNK_TYPES 15
 
 
 /**
@@ -143,6 +157,30 @@ auth_ret_t auth_parse_hmac(struct auth_context *actx, char *str)
 }
 
 /**
+ * Set the flag defining which chunk to authenticate according to given string.
+ * The string should contain name of the chunk to authenticate, corresponding
+ * flag in authentication context (actx->auth_chunks) is set
+ *
+ * @param actx Pointer to authentication context
+ * @param str String containing name of the chunk
+ * @return AUTHERR_OK if chunk was parsed and flag was set. Other error value
+ * in error.
+ */
+auth_ret_t set_chunk_flag(struct auth_context *actx, char *str)
+{
+        int i;
+
+        for (i = 0; i < NUM_OF_CHUNK_TYPES; i++) {
+                if (!strcmp(str,supported_chunk[i].name)) {
+                        actx->auth_chunks = set_flag(actx->auth_chunks,
+                                        supported_chunk[i].flag);
+                        return AUTHERR_OK;
+                }
+        }
+        return AUTHERR_UNSUPPORTED_PARAM;
+}
+
+/**
  * Parse chunk type for which authentication should be turned on.
  * The parsed chunk type is set into the given authentication context.
  * @param actx Pointer to the authentication context.
@@ -152,15 +190,20 @@ auth_ret_t auth_parse_hmac(struct auth_context *actx, char *str)
  */
 auth_ret_t auth_parse_chunk(struct auth_context *actx, char *str)
 {
-        int i;
+        char *tok;
+        auth_ret_t ret;
 
-        for (i = 0; i < NUM_OF_CHUNK_TYPES; i++) {
-                if (!strcmp(str,supported_chunk[i].name)) {
-                        actx->auth_chunk = supported_chunk[i].ident;
-                        return AUTHERR_OK;
-                }
+        tok = strtok(str,",");
+        if (!tok) 
+                return set_chunk_flag(actx,str);
+
+        while (tok) {
+                if ((ret = set_chunk_flag(actx,tok)) != AUTHERR_OK)
+                        return ret;
+
+                tok = strtok(NULL,",");
         }
-        return AUTHERR_UNSUPPORTED_PARAM;
+        return AUTHERR_OK;
 }
 
 /**
@@ -330,28 +373,34 @@ static int set_hmac(int sock, struct auth_context *actx)
 /**
  * Set the chunks which should be authenticated.
  * @param sock Socket for which the socket option will be set.
- * @param actx Pointer to the authentication contect containing the chunks requiring authentication.
+ * @param actx Pointer to the authentication contect containing the chunks
+ * requiring authentication.
  * @return 0 on success, -1 on error.
  */
 static int set_chunks(int sock, struct auth_context *actx)
 {
         struct sctp_authchunk chunks;
-        int ret = 0;
+        int i;
 
-        memset(&chunks, 0, sizeof(chunks));
+        if (!actx->auth_chunks) 
+                return 0; // no chunks defined
 
-        /* XXX : we support setting only one chunk type */
-        chunks.sauth_chunk = htons(actx->auth_chunk);
-
-        TRACE("Adding chunk type %d to be authenticated\n",
-                        chunks.sauth_chunk);
-
-        if (setsockopt(sock, SOL_SCTP,SCTP_AUTH_CHUNK,
-                                &chunks, sizeof(chunks)) != 0) {
-                ERROR("Unable to set AUTH_CHUNK : %s \n", strerror(errno));
-                ret = -1;
+        for ( i = 0; i < NUM_OF_CHUNK_TYPES; i++) {
+                if (is_flag(actx->auth_chunks, supported_chunk[i].flag)) {
+                        memset(&chunks, 0, sizeof(chunks));
+                        chunks.sauth_chunk = supported_chunk[i].ident;
+                        TRACE("Adding chunk type %s(0x%.2x) to be authenticated\n",
+                                        supported_chunk[i].name,
+                                        chunks.sauth_chunk);
+                        if (setsockopt(sock, SOL_SCTP,SCTP_AUTH_CHUNK,
+                                                &chunks, sizeof(chunks)) != 0) {
+                                ERROR("Unable to set AUTH_CHUNK : %s \n",
+                                                strerror(errno));
+                                return -1;
+                        }
+                }
         }
-        return ret;
+        return 0;
 }
 
 /**
@@ -442,11 +491,20 @@ auth_ret_t auth_set_params(int sock, struct auth_context *actx)
         return AUTHERR_OK;
 }
 
+void auth_print_supported_chunks(FILE *f)
+{
+        int i;
+
+        for ( i = 0; i < NUM_OF_CHUNK_TYPES; i++)
+                fprintf(f,"%s ", supported_chunk[i].name);
+}
+
 #ifdef DEBUG
 void debug_auth_context(struct auth_context *actx)
 {
         struct auth_keydata *key;
-        DBG("AUTH: hmac %d / chunk %d\n", actx->auth_hmac_id, actx->auth_chunk);
+        DBG("AUTH: hmac %d / chunks 0x%.4x\n", actx->auth_hmac_id,
+                        actx->auth_chunks);
         key = actx->auth_keys;
         while (key != NULL) {
                 DBG("AUTH-KEY: id %d\n",key->auth_key_id);
