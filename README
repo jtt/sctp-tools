@@ -22,6 +22,10 @@ RUNNING
 Both programs have '--help' option which should provide some information on the
 available command line parameters.
 
+To enable authentication support on Linux, issue (as root) following command
+
+$ sysctl -w net.sctp.auth_enable=1
+
 CONTACT
 
 Send all bug reports, improvement ideas and such to jtaimisto@gmail.com.
