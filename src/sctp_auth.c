@@ -170,6 +170,11 @@ auth_ret_t set_chunk_flag(struct auth_context *actx, char *str)
 {
         int i;
 
+        if (!strcmp(str,"all")) {
+                        actx->auth_chunks = 0xffff;
+                        return AUTHERR_OK;
+        }
+
         for (i = 0; i < NUM_OF_CHUNK_TYPES; i++) {
                 if (!strcmp(str,supported_chunk[i].name)) {
                         actx->auth_chunks = set_flag(actx->auth_chunks,
