@@ -52,6 +52,13 @@ void partial_store_flush(struct partial_store *ctx);
  */
 typedef uint16_t flags_t;
 
+struct common_context {
+        int sock; /**< SCTP socket */
+        flags_t options; /**< Runtime options */
+        struct sctp_initmsg *initmsg; /**< Association parameters, if set */
+        struct auth_context *actx; /**< Authentication parameters, if set */
+};
+
 /*
  * common operation flags
  */
@@ -110,4 +117,9 @@ void print_input( struct sockaddr_storage *from, int len, int flags,
 void print_output( struct sockaddr_storage *to, int len);
 void print_output_verbose( struct sockaddr_storage *to, int len,
                 uint32_t ppid, uint16_t streamno);
+
+int common_parse_args(int c, char *optarg, struct common_context *ctx);
+void common_print_usage();
+void common_deinit(struct common_context *ctx);
+int common_init(struct common_context *ctx);
 #endif /* _COMMON_H_ */

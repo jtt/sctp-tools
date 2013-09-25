@@ -86,4 +86,9 @@ enum dbg_module {
 #define IGNORE_ACCEPT_ERROR
 */
 
+/**
+ * Version number for the tools.
+ */
+#define TOOLS_VERSION "0.4-auth"
+
 #endif /* _DEFS_H_ */

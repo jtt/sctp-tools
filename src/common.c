@@ -52,6 +52,7 @@
 #include "defs.h"
 #include "debug.h"
 #include "common.h"
+#include "sctp_auth.h"
 
 
 /** 
@@ -501,4 +502,203 @@ void print_output_verbose( struct sockaddr_storage *to, int len,
         print_output(to,len);
         printf("\t stream: %d ppid: %d\n",
                         streamno, ppid);
+}
+
+/**
+ * Parse common command line arguments.
+ * @param c The command line short argument
+ * @param oparg Argument for the parameter, if any
+ * @param ctx Pointer to the common context which is filled according
+ * to command line parameters.
+ * @return 0 if argument is parsed, -1 if error occurred, -2 if 
+ * command line parameter was unknown.
+ */
+int common_parse_args(int c, char *optarg, struct common_context *ctx)
+{
+        auth_ret_t auth_ret;
+        uint16_t streams;
+#ifdef DEBUG
+        uint16_t debug_level = DEBUG_DEFAULT_LEVEL;
+#endif /* DEBUG */
+
+        if (c == -1)
+                return 0;
+
+        switch(c) {
+                case 'S' :
+                        ctx->options = set_flag( ctx->options, SEQ_FLAG );
+                        break;
+                case 'e' :
+                        ctx->options = set_flag( ctx->options, ECHO_FLAG );
+                        break;
+                case 'v' :
+                        ctx->options = set_flag( ctx->options, VERBOSE_FLAG);
+                        break;
+                case 'x' :
+                        ctx->options = set_flag(ctx->options, XDUMP_FLAG);
+                        break;
+                case 'I' :
+                        if (parse_uint16(optarg, &streams) < 0 ) {
+                                fprintf(stderr,
+                                        "Invalid input stream count given\n");
+                                return -1;
+                        }
+                        if (ctx->initmsg == NULL )
+                                ctx->initmsg = mem_zalloc(sizeof(struct sctp_initmsg));
+
+                        ctx->initmsg->sinit_max_instreams = streams;
+                        break;
+                case 'O' :
+                        if (parse_uint16(optarg, &streams) < 0 ) {
+                                fprintf(stderr,
+                                       "Invalid output stream count given\n");
+                                return -1;
+                        }
+                        if (ctx->initmsg == NULL)
+                                ctx->initmsg = mem_zalloc(sizeof(*ctx->initmsg));
+
+                        ctx->initmsg->sinit_num_ostreams = streams;
+                        break;
+#ifdef DEBUG
+                case 'D' :
+                        if (parse_uint16(optarg, &debug_level) < 0) {
+                                fprintf(stderr,"Malformed Debug level number given\n");
+                                return -1;
+                        }
+                        if (debug_level > DBG_L_ERR) {
+                                fprintf(stderr, "Invalid debug level (expected 0-3)\n");
+                                return -1;
+                        }
+                        DBG_LEVEL(debug_level);
+                        break;
+#endif /* DEBUG */
+                case 'A' :
+                        if (ctx->actx == NULL) {
+                                ctx->actx = auth_create_context();
+                                ctx->options = set_flag(ctx->options, AUTH_FLAG);
+                        }
+                        auth_ret = auth_parse_key(ctx->actx, optarg);
+                        if (auth_ret == AUTHERR_INVALID_PARAM) {
+                                fprintf(stderr,"Invalid key given\n");
+                                return -1;
+                        }
+                        break;
+                case 'C' :
+                        if (ctx->actx == NULL) {
+                                ctx->actx = auth_create_context();
+                                ctx->options = set_flag(ctx->options, AUTH_FLAG);
+                        }
+                        auth_ret = auth_parse_chunk(ctx->actx, optarg);
+                        if (auth_ret == AUTHERR_INVALID_PARAM) {
+                                fprintf(stderr,"Invalid chunk type given\n");
+                                return -1;
+                        } else if (auth_ret == AUTHERR_UNSUPPORTED_PARAM) {
+                                fprintf(stderr,"Given chunk type not supported for authentication\n");
+                                return -1;
+                        }
+                        break;
+                case 'M' :
+                        if (ctx->actx == NULL) {
+                                ctx->actx = auth_create_context();
+                                ctx->options = set_flag(ctx->options, AUTH_FLAG);
+                        }
+                        auth_ret = auth_parse_hmac(ctx->actx, optarg);
+                        if (auth_ret == AUTHERR_INVALID_PARAM) {
+                                fprintf(stderr,"Invalid hmac type given\n");
+                                return -1;
+                        } else if (auth_ret == AUTHERR_UNSUPPORTED_PARAM) {
+                                fprintf(stderr, "HMAC %s is not supported\n",
+                                                optarg);
+                                return -1;
+                        }
+                        break;
+                default :
+                        return -2;
+        }
+        return 0;
+}
+
+/**
+ * Print usage information about the common parameters.
+ */
+void common_print_usage() 
+{
+        printf("\t--seq          : use SOCK_SEQPACKET socket instead of SOCK_STREAM\n");
+        printf("\t--echo         : Echo mode\n");
+        printf("\t--verbose      : Be more verbosive \n");
+        printf("\t--xdump        : Print hexdump of received data \n");
+        printf("\t--instreams    : Maximum number of input streams to negotiate for the association\n");
+        printf("\t--outstreams   : Number of output streams to negotiate\n");
+        printf("\t--help         : Print this message \n");
+        printf("\t--auth-hmac    : Select the hmac algorithm to use (sha1 or sha256)\n");
+        printf("\t--auth-chunk   : Select the chunk(s) to authenticate (comma separated list of chunks)\n");
+        printf("\tsupported chunks: ");
+        auth_print_supported_chunks(stdout);
+        printf("\n");
+        printf("\t--auth-key     : Set the authentication key (format: [<id>:]0x<key-data>)\n");
+        printf("\t                 The <id> is optional keyid.\n");
+#ifdef DEBUG
+        printf("\t--debug <level>: Set the debug level to <level> (0-3, 0=TRACE)\n");
+#endif /* DEBUG */
+}
+
+/**
+ * Do initialization for the common part.
+ * @param ctx Pointer to the common context
+ */
+int common_init(struct common_context *ctx)
+{
+        ctx->sock = -1; 
+        if ( is_flag( ctx->options, SEQ_FLAG )) {
+                DBG("Using SEQPKT socket\n");
+                ctx->sock = socket( PF_INET6, SOCK_SEQPACKET, IPPROTO_SCTP );
+        } else {
+                DBG("Using STREAM socket\n");
+                ctx->sock = socket( PF_INET6, SOCK_STREAM, IPPROTO_SCTP );
+        }
+        if ( ctx->sock < 0 ) {
+                fprintf(stderr, "Unable to create socket: %s \n",
+                                strerror(errno));
+                ctx->sock = -1;
+                return -1;
+        }
+        if (ctx->initmsg != NULL ) {
+                TRACE("Requesting for %d output streams and at max %d input streams\n",
+                                ctx->initmsg->sinit_num_ostreams,
+                                ctx->initmsg->sinit_max_instreams);
+                if (setsockopt( ctx->sock, SOL_SCTP, SCTP_INITMSG, 
+                                        ctx->initmsg, sizeof(*ctx->initmsg)) < 0) {
+                        fprintf(stderr,"Warning: unable to set the association parameters: %s\n",
+                                        strerror(errno));
+                }
+        }
+        if (is_flag(ctx->options, AUTH_FLAG)) {
+                        ASSERT(ctx->actx != NULL);
+#ifdef DEBUG
+                        debug_auth_context(ctx->actx);
+#endif /* DEBUG */
+                        if (!AUTHCTX_HAS_KEY(ctx->actx)) {
+                                fprintf(stderr,"No authentication key set\n");
+                                return -1;
+                        }
+                        if (auth_set_params(ctx->sock, ctx->actx) != AUTHERR_OK) {
+                                fprintf(stderr,"Unable to set authentication parameters\n");
+                                return -1;
+                        }
+        }
+        return 0;
+}
+
+/**
+ * Deinitialize the common components.
+ */
+void common_deinit(struct common_context *ctx)
+{
+        if (ctx->initmsg != NULL )
+                mem_free( ctx->initmsg);
+        if (ctx->actx != NULL)
+                auth_delete_context(ctx->actx);
+
+        if (ctx->sock != -1)
+                close( ctx->sock );
 }

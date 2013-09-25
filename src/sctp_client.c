@@ -52,9 +52,6 @@
 #include "common.h"
 #include "sctp_auth.h"
 
-
-#define PROG_VERSION "0.0.4-auth"
-
 /**
  * Maximum lenght for the file where to read the data.
  */
@@ -99,18 +96,15 @@
  * Main context for the client.
  */
 struct client_ctx {
-        int sock; /**< Socket to use for sending */
         struct sockaddr_storage host; /**< Remote host address */
         uint16_t port;/**< Port number for remote host */
         uint16_t lport; /**< Port number for local port or 0 */
         uint16_t chunk_size; /**< Number of bytes to send on each write */
         uint16_t chunk_count;/**< Number of writes to do */
-        flags_t options; /**< Runtime options */
         char filename[FILENAME_LEN]; /**< File to read data from */
         uint32_t ppid; /**< PPID to set to the packet. */
         uint16_t streamno; /**< Stream id to set to the packet. */
-        struct sctp_initmsg *initmsg; /**< association parameters, if set */
-        struct auth_context *actx; /**< Authentication parameters, if set */
+        struct common_context common; /**< Context common for client and server*/
 };
 
 /**
@@ -135,8 +129,9 @@ static int do_client( struct client_ctx *ctx )
         else
                 addrlen = sizeof( struct sockaddr_in6);
 
-        if ( ! is_flag( ctx->options, SEQ_FLAG ) ) {
-                ret = connect( ctx->sock, (struct sockaddr *)&(ctx->host), addrlen );
+        if ( ! is_flag( ctx->common.options, SEQ_FLAG ) ) {
+                ret = connect( ctx->common.sock,
+                              (struct sockaddr *)&(ctx->host), addrlen );
                 if ( ret < 0 ) {
                         print_error("Unable to connect()", errno);
                         return -1;
@@ -162,12 +157,12 @@ static int do_client( struct client_ctx *ctx )
                 }
 
                 DBG("Sending %d bytes \n", ret );
-                if (is_flag(ctx->options, XDUMP_FLAG ))
+                if (is_flag(ctx->common.options, XDUMP_FLAG ))
                         xdump_data( stdout, chunk, ret, "Data to send");
 
                 printf("Sending chunk %d/%d \n", (i+1), ctx->chunk_count);
 
-                ret = sendit( ctx->sock, ctx->ppid, ctx->streamno, 
+                ret = sendit( ctx->common.sock, ctx->ppid, ctx->streamno, 
                                 (struct sockaddr *)&ctx->host, addrlen, 
                                 chunk, ctx->chunk_size );
 
@@ -175,17 +170,17 @@ static int do_client( struct client_ctx *ctx )
                         print_error("Unable to send data", errno);
                         break;
                 }
-                if (is_flag(ctx->options, VERBOSE_FLAG)) 
+                if (is_flag(ctx->common.options, VERBOSE_FLAG)) 
                         print_output_verbose(&ctx->host, ctx->chunk_size,
                                         ctx->ppid, ctx->streamno);
 
 
-                if ( is_flag( ctx->options, ECHO_FLAG ) ) {
+                if ( is_flag( ctx->common.options, ECHO_FLAG ) ) {
                         memset( &peer, 0, sizeof(peer));
                         memset( &info, 0, sizeof(info));
                         peer_len = addrlen;
                         recv_flags = 0;
-                        recv_len = recv_wait( ctx->sock, 
+                        recv_len = recv_wait( ctx->common.sock, 
                                         ECHO_WAIT_MS, chunk, ctx->chunk_size, 
                                         (struct sockaddr *)&peer, &peer_len,
                                         &info,&recv_flags);
@@ -197,26 +192,26 @@ static int do_client( struct client_ctx *ctx )
                         } else if ( recv_len == 0 ) {
                                 printf("Timed out while waiting for echo\n");
                         } else {
-                                if (is_flag(ctx->options, VERBOSE_FLAG))
+                                if (is_flag(ctx->common.options, VERBOSE_FLAG))
                                         print_input(&peer, recv_len, recv_flags,&info);
 
                                 printf("Received %d bytes of possible echo\n", recv_len);
-                                if (is_flag(ctx->options, XDUMP_FLAG))
+                                if (is_flag(ctx->common.options, XDUMP_FLAG))
                                         xdump_data(stdout,chunk, recv_len, "Received data");
                         }
                 }
         }
         close( fd );
 
-        if ( is_flag( ctx->options, KEEP_FLAG ) ) {
+        if ( is_flag( ctx->common.options, KEEP_FLAG ) ) {
                 printf("Press any key to terminate the client ...\n");
                 ret = read( 0, chunk, 1 );
                 if ( ret < 0 ) {
                         WARN("read() failed : %s \n", strerror(errno));
                 }
         }
-        close( ctx->sock );
-        ctx->sock = -1;
+        close( ctx->common.sock );
+        ctx->common.sock = -1;
 
         return 0;
 }
@@ -226,40 +221,24 @@ static int do_client( struct client_ctx *ctx )
  */
 static void print_usage()
 {
-        printf("sctp_cli v%s\n", PROG_VERSION);
+        printf("sctp_cli v%s\n", TOOLS_VERSION);
         printf("Usage: sctp_cli [options] \n");
         printf("Available options are:\n");
-        printf("\t--port <port>     : Destination port is <port> \n");
-        printf("\t--lport <port>    : Bind to local port <port> \n");
-        printf("\t--host <host>     : Remote host to connect is <host>\n");
-        printf("\t--size <size>     : Size of the chunk to send is <size>, default %d\n",
+        printf("\t--port <port>  : Destination port is <port> \n");
+        printf("\t--lport <port> : Bind to local port <port> \n");
+        printf("\t--host <host>  : Remote host to connect is <host>\n");
+        printf("\t--size <size>  : Size of the chunk to send is <size>, default %d\n",
                         DEFAULT_CHUNK_SIZE);
-        printf("\t--count <cnt>     : Send <cnt> chunks, default is %d\n",
+        printf("\t--count <cnt>  : Send <cnt> chunks, default is %d\n",
                         DEFAULT_COUNT);
-        printf("\t--keep            : Keep the connection after all data chunks are sent\n");
-        printf("\t--file <file>     : Read data to chunks from <file>, default is %s\n",
+        printf("\t--keep         : Keep the connection after all data chunks are sent\n");
+        printf("\t--file <file>  : Read data to chunks from <file>, default is %s\n",
                         DEFAULT_FILENAME);
-        printf("\t--seq             : Use SOCK_SEQPACKET instead of SOCK_STREAM \n");
-        printf("\t--verbose         : Be more verbosive\n");
-        printf("\t--xdump           : Print hexdump of sent data\n");
-        printf("\t--ppid <ppid>     : The PPID value for sent chunks is <ppid>, default %d\n",
+        printf("\t--ppid <ppid>  : The PPID value for sent chunks is <ppid>, default %d\n",
                         DEFAULT_PPID);
-        printf("\t--streamid <s>    : Send data to stream with id <d>, default is %d\n",
+        printf("\t--streamid <s> : Send data to stream with id <d>, default is %d\n",
                         DEFAULT_STREAM_NO);
-        printf("\t--echo            : Expect the server to echo sent data back\n");
-        printf("\t--instreams       : Maximum number of input streams to negotiate for the association\n");
-        printf("\t--outstreams      : Number of output streams to negotiate\n");
-        printf("\t--help            : Print this message \n");
-        printf("\t--auth-hmac       : Select the hmac algorithm to use (sha1 or sha256)\n");
-        printf("\t--auth-chunk      : Select the chunk(s) to authenticate (comma separated list of chunks)\n");
-        printf("\tsupported chunks  : ");
-        auth_print_supported_chunks(stdout);
-        printf("\n");
-        printf("\t--auth-key        : Set the authentication key (format: [<id>:]0x<key-data>)\n");
-        printf("\t                    The <id> is optional keyid.\n");
-#ifdef DEBUG
-        printf("\t--debug <level>   : Set the debug level to <level> (0-3, 0=TRACE)\n");
-#endif /* DEBUG */
+        common_print_usage();
 }
 
 /**
@@ -273,13 +252,8 @@ static void print_usage()
  */
 static int parse_args( int argc, char **argv, struct client_ctx *ctx )
 {
-        uint16_t streams;
-#ifdef DEBUG
-        uint16_t debug_level = DEBUG_DEFAULT_LEVEL;
-#endif /* DEBUG */
-        int c, option_index;
+        int c, option_index,ret;
         int got_port = 0, got_addr = 0;
-        auth_ret_t auth_ret;
         struct option long_options[] = {
                 { "port", 1, 0, 'p' },
                 { "host", 1, 0, 'h' },
@@ -308,7 +282,8 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
 
         while( 1 ) {
 
-                c = getopt_long(argc, argv, "p:h:c:s:HekSvTxf:I:O:D:A:M:C:", long_options, &option_index);
+                c = getopt_long(argc, argv, "p:h:c:s:HekSvTxf:I:O:D:A:M:C:",
+                                long_options, &option_index);
                 if ( c == -1 ) 
                         break;
 
@@ -326,12 +301,6 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                         return -1;
                                 }
                                 got_port = 1;
-                                break;
-                        case 'S' :
-                                ctx->options = set_flag( ctx->options, SEQ_FLAG );
-                                break;
-                        case 'e' :
-                                ctx->options = set_flag( ctx->options, ECHO_FLAG );
                                 break;
                         case 'P' :
                                 if ( parse_uint32( optarg, &(ctx->ppid) ) < 0 ) {
@@ -358,37 +327,11 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                 }
                                 break;
                         case 'k' :
-                                ctx->options = set_flag( ctx->options, KEEP_FLAG );
+                                ctx->common.options = set_flag( ctx->common.options, KEEP_FLAG );
                                 break;
                         case 'f' :
                                 strncpy( ctx->filename, optarg, FILENAME_LEN );
                                 ctx->filename[FILENAME_LEN-1] = '\0';
-                                break;
-                        case 'v' :
-                                ctx->options = set_flag( ctx->options, VERBOSE_FLAG);
-                                break;
-                        case 'x' :
-                                ctx->options = set_flag(ctx->options, XDUMP_FLAG);
-                                break;
-                        case 'I' :
-                                if (parse_uint16(optarg, &streams) < 0 ) {
-                                        fprintf(stderr, "Invalid input stream count given\n");
-                                        return -1;
-                                }
-                                if (ctx->initmsg == NULL )
-                                        ctx->initmsg = mem_zalloc( sizeof(struct sctp_initmsg));
-
-                                ctx->initmsg->sinit_max_instreams = streams;
-                                break;
-                        case 'O' :
-                                if (parse_uint16(optarg, &streams) < 0 ) {
-                                        fprintf(stderr,"Invalid output stream count given\n");
-                                        return -1;
-                                }
-                                if (ctx->initmsg == NULL)
-                                        ctx->initmsg = mem_zalloc(sizeof(*ctx->initmsg));
-
-                                ctx->initmsg->sinit_num_ostreams = streams;
                                 break;
                         case 'L' :
                                 if (parse_uint16(optarg, &ctx->lport) < 0) {
@@ -396,63 +339,17 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                         return -1;
                                 }
                                 break;
-#ifdef DEBUG
-                        case 'D' :
-                                if (parse_uint16(optarg, &debug_level) < 0) {
-                                        fprintf(stderr,"Malformed Debug level number given\n");
-                                        return -1;
-                                }
-                                if (debug_level > DBG_L_ERR) {
-                                        fprintf(stderr, "Invalid debug level (expected 0-3)\n");
-                                        return -1;
-                                }
-                                DBG_LEVEL(debug_level);
-                                break;
-#endif /* DEBUG */
-                        case 'A' :
-                                if (ctx->actx == NULL) {
-                                        ctx->actx = auth_create_context();
-                                        ctx->options = set_flag(ctx->options, AUTH_FLAG);
-                                }
-                                auth_ret = auth_parse_key(ctx->actx, optarg);
-                                if (auth_ret == AUTHERR_INVALID_PARAM) {
-                                        fprintf(stderr,"Invalid key given\n");
-                                        return -1;
-                                }
-                                break;
-                        case 'C' :
-                                if (ctx->actx == NULL) {
-                                        ctx->actx = auth_create_context();
-                                        ctx->options = set_flag(ctx->options, AUTH_FLAG);
-                                }
-                                auth_ret = auth_parse_chunk(ctx->actx, optarg);
-                                if (auth_ret == AUTHERR_INVALID_PARAM) {
-                                        fprintf(stderr,"Invalid chunk type given\n");
-                                        return -1;
-                                } else if (auth_ret == AUTHERR_UNSUPPORTED_PARAM) {
-                                        fprintf(stderr, "Given chunk type not supported for authentication\n");
-                                        return -1;
-                                }
-                                break;
-                        case 'M' :
-                                if (ctx->actx == NULL) {
-                                        ctx->actx = auth_create_context();
-                                        ctx->options = set_flag(ctx->options, AUTH_FLAG);
-                                }
-                                auth_ret = auth_parse_hmac(ctx->actx, optarg);
-                                if (auth_ret == AUTHERR_INVALID_PARAM) {
-                                        fprintf(stderr,"Invalid hmac type given\n");
-                                        return -1;
-                                } else if (auth_ret == AUTHERR_UNSUPPORTED_PARAM) {
-                                        fprintf(stderr, "HMAC %s is not supported\n",
-                                                        optarg);
-                                        return -1;
-                                }
-                                break;
                         case 'H' :
-                        default :
                                 print_usage();
                                 return 0;
+                        default :
+                                ret = common_parse_args(c,optarg,&ctx->common);
+                                if (ret == -1) {
+                                        return ret;
+                                } else if (ret == -2) {
+                                        print_usage();
+                                        return 0;
+                                }
                                 break;
                 }
         }
@@ -515,7 +412,7 @@ int main( int argc, char *argv[] )
 {
         struct client_ctx ctx;
         struct sctp_event_subscribe event;
-        int ret, domain, type;
+        int ret, domain;
 
         memset( &ctx, 0, sizeof( ctx));
 
@@ -523,7 +420,7 @@ int main( int argc, char *argv[] )
         ctx.chunk_count = DEFAULT_COUNT;
         ctx.streamno = DEFAULT_STREAM_NO;
         ctx.ppid = DEFAULT_PPID;
-        ctx.sock = -1;
+        ctx.common.sock = -1;
         strncpy( ctx.filename, DEFAULT_FILENAME, FILENAME_LEN );
 
         ret =  parse_args(argc, argv, &ctx );
@@ -542,77 +439,33 @@ int main( int argc, char *argv[] )
                 ((struct sockaddr_in6 *)&(ctx.host))->sin6_port = htons(ctx.port);
                 domain = PF_INET6;
         }
+        if (common_init(&ctx.common) != 0)
+                goto out;
 
-        if ( is_flag( ctx.options, SEQ_FLAG ) ) {
-                DBG("Using SEQPACKET socket\n");
-                type = SOCK_SEQPACKET;
-        } else {
-                DBG("Using STREAM socket\n");
-                type = SOCK_STREAM;
-        }
-
-        ctx.sock = socket( domain, type, IPPROTO_SCTP );
-        if ( ctx.sock < 0 ) {
-                fprintf(stderr, "Unable to create socket: %s \n", strerror(errno));
-                return EXIT_FAILURE;
-        }
         if (ctx.lport != 0 ) {
-                if (bind_to_local_port(domain, ctx.sock, ctx.lport) != 0 ) {
-                        close(ctx.sock);
+                if (bind_to_local_port(domain, ctx.common.sock, ctx.lport) != 0 ) {
+                        close(ctx.common.sock);
                         return EXIT_FAILURE;
                 }
         }
 
-        if (ctx.initmsg != NULL ) {
-                TRACE("Requesting for %d output streams and at max %d input streams\n",
-                                ctx.initmsg->sinit_num_ostreams,
-                                ctx.initmsg->sinit_max_instreams);
-                if (setsockopt( ctx.sock, SOL_SCTP, SCTP_INITMSG, 
-                                        ctx.initmsg, sizeof(*ctx.initmsg)) < 0) {
-                        fprintf(stderr,"Warning: unable to set the association parameters: %s\n",
-                                        strerror(errno));
-                }
-        }
-        if (is_flag(ctx.options, (VERBOSE_FLAG|ECHO_FLAG))) {
+        if (is_flag(ctx.common.options, (VERBOSE_FLAG|ECHO_FLAG))) {
                 /* we need to subscribe to I/O events to be able to show them
                  * from received data
                  */
                 memset(&event, 0, sizeof(event));
                 event.sctp_data_io_event = 1;
 
-                if (setsockopt(ctx.sock, IPPROTO_SCTP, SCTP_EVENTS,
+                if (setsockopt(ctx.common.sock, IPPROTO_SCTP, SCTP_EVENTS,
                                         &event, sizeof(event)) != 0 ) {
                         WARN("Unable to register for SCTP IO events: %s \n",
                                         strerror(errno));
                         /* not a fatal error, we just get the I/O info wrong */
                 }
         }
-        if (is_flag(ctx.options, AUTH_FLAG)) {
-                ASSERT(ctx.actx != NULL);
-#ifdef DEBUG
-                debug_auth_context(ctx.actx);
-#endif /* DEBUG */
-                if (!AUTHCTX_HAS_KEY(ctx.actx)) {
-                        fprintf(stderr,"No Authentication key set\n");
-                        goto out;
-                }
-                if (auth_set_params(ctx.sock, ctx.actx) != AUTHERR_OK) {
-                        fprintf(stderr,"Unable to set Authentication parameters\n");
-                        goto out;
-                }
-        }
-
 
         do_client( &ctx );
 out :
-        if (ctx.sock != -1 )
-                close(ctx.sock);
-
-        if ( ctx.initmsg != NULL )
-                mem_free(ctx.initmsg);
-
-        if (ctx.actx != NULL)
-                auth_delete_context(ctx.actx);
-
+        common_deinit(&ctx.common);
         return EXIT_SUCCESS; /* XXX Error case */
 }
