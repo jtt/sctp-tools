@@ -5,6 +5,8 @@ sctp-tools contains a simple SCTP server and SCTP client program which can be
 used to send data using SCTP protocol. The programs can be used to transfer
 data using both SEQPKT or STREAM type of SCTP sockets. 
 
+sctp-tools can be used both on Linux and FreeBSD.
+
 LICENSING
 
 The programs are licensed under two-clause BSD license.
@@ -12,6 +14,9 @@ The programs are licensed under two-clause BSD license.
 BUILDING and INSTALLING
 
 Edit the Makefile if necessary, type 'make' to compile the programs.
+
+For FreeBSD, you'll need GNU make (install with 'pkg_add -r gmake'), then
+type 'gmake FREEBSD=1'.
 
 If you want to enable the debug information, edit src/defs.h and remove
 comments around #define DEBUG. Then rebuild the application. If built with
