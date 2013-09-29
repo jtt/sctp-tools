@@ -170,7 +170,14 @@ int handle_event( uint8_t *data )
                         verbose_send_failed_event(&(not->sn_send_failed));
                         break;
                 case SCTP_AUTHENTICATION_EVENT :
+#ifdef FREEBSD
+                        verbose_auth_event(&(not->sn_auth_event));
+#else
+                        /* Linux has named this event sn_authkey_event
+                         * RFC 6458 says that it should be sb_auth_event
+                         */
                         verbose_auth_event(&(not->sn_authkey_event));
+#endif /* FREEBSD */
                         break;
                 default :
                         TRACE("Discarding event with unknown type %d \n",

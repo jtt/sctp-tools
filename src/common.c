@@ -514,7 +514,7 @@ void print_output_verbose( struct sockaddr_storage *to, int len,
  * @return 0 if argument is parsed, -1 if error occurred, -2 if 
  * command line parameter was unknown.
  */
-int common_parse_args(int c, char *optarg, struct common_context *ctx)
+int common_parse_args(int c, char *arg, struct common_context *ctx)
 {
         auth_ret_t auth_ret;
         uint16_t streams;
@@ -539,7 +539,7 @@ int common_parse_args(int c, char *optarg, struct common_context *ctx)
                         ctx->options = set_flag(ctx->options, XDUMP_FLAG);
                         break;
                 case 'I' :
-                        if (parse_uint16(optarg, &streams) < 0 ) {
+                        if (parse_uint16(arg, &streams) < 0 ) {
                                 fprintf(stderr,
                                         "Invalid input stream count given\n");
                                 return -1;
@@ -550,7 +550,7 @@ int common_parse_args(int c, char *optarg, struct common_context *ctx)
                         ctx->initmsg->sinit_max_instreams = streams;
                         break;
                 case 'O' :
-                        if (parse_uint16(optarg, &streams) < 0 ) {
+                        if (parse_uint16(arg, &streams) < 0 ) {
                                 fprintf(stderr,
                                        "Invalid output stream count given\n");
                                 return -1;
@@ -562,7 +562,7 @@ int common_parse_args(int c, char *optarg, struct common_context *ctx)
                         break;
 #ifdef DEBUG
                 case 'D' :
-                        if (parse_uint16(optarg, &debug_level) < 0) {
+                        if (parse_uint16(arg, &debug_level) < 0) {
                                 fprintf(stderr,"Malformed Debug level number given\n");
                                 return -1;
                         }
@@ -578,7 +578,7 @@ int common_parse_args(int c, char *optarg, struct common_context *ctx)
                                 ctx->actx = auth_create_context();
                                 ctx->options = set_flag(ctx->options, AUTH_FLAG);
                         }
-                        auth_ret = auth_parse_key(ctx->actx, optarg);
+                        auth_ret = auth_parse_key(ctx->actx, arg);
                         if (auth_ret == AUTHERR_INVALID_PARAM) {
                                 fprintf(stderr,"Invalid key given\n");
                                 return -1;
@@ -589,7 +589,7 @@ int common_parse_args(int c, char *optarg, struct common_context *ctx)
                                 ctx->actx = auth_create_context();
                                 ctx->options = set_flag(ctx->options, AUTH_FLAG);
                         }
-                        auth_ret = auth_parse_chunk(ctx->actx, optarg);
+                        auth_ret = auth_parse_chunk(ctx->actx, arg);
                         if (auth_ret == AUTHERR_INVALID_PARAM) {
                                 fprintf(stderr,"Invalid chunk type given\n");
                                 return -1;
@@ -603,13 +603,13 @@ int common_parse_args(int c, char *optarg, struct common_context *ctx)
                                 ctx->actx = auth_create_context();
                                 ctx->options = set_flag(ctx->options, AUTH_FLAG);
                         }
-                        auth_ret = auth_parse_hmac(ctx->actx, optarg);
+                        auth_ret = auth_parse_hmac(ctx->actx, arg);
                         if (auth_ret == AUTHERR_INVALID_PARAM) {
                                 fprintf(stderr,"Invalid hmac type given\n");
                                 return -1;
                         } else if (auth_ret == AUTHERR_UNSUPPORTED_PARAM) {
                                 fprintf(stderr, "HMAC %s is not supported\n",
-                                                optarg);
+                                                arg);
                                 return -1;
                         }
                         break;

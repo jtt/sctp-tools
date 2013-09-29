@@ -90,5 +90,12 @@ enum dbg_module {
  * Version number for the tools.
  */
 #define TOOLS_VERSION "0.4-auth"
+#ifdef FREEBSD
+/* FreeBSD setsockopt() wants the protocol number as the 'level'
+ * parameter, Linux uses SOL_SCTP, we'll define that here for
+ * FreeBSD
+ */
+#define SOL_SCTP 132
+#endif /* FREEBSD */
 
 #endif /* _DEFS_H_ */
