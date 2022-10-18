@@ -230,7 +230,7 @@ int sendit( int sock, uint32_t ppid, uint16_t streamno,
 
         ret = sctp_sendmsg( sock, chunk, chunk_size, 
                         dst, dst_len,
-                        ppid, /* ppid */
+                        htonl(ppid), /* ppid */
                         0, /* flags */
                         streamno, /* stream no */
                         0, /* ttl */
