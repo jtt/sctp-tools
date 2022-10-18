@@ -89,6 +89,8 @@
 struct client_ctx {
         struct sockaddr_storage host; /**< Remote host address */
         uint16_t port;/**< Port number for remote host */
+        
+        const char *lhost; /**< Local host address */
         uint16_t lport; /**< Port number for local port or 0 */
         uint16_t chunk_size; /**< Number of bytes to send on each write */
         uint16_t chunk_count;/**< Number of writes to do */
@@ -218,6 +220,7 @@ static void print_usage()
         printf("\t--port <port>  : Destination port is <port> \n");
         printf("\t--lport <port> : Bind to local port <port> \n");
         printf("\t--host <host>  : Remote host to connect is <host>\n");
+        printf("\t--lhost <host>  : Bind to local host <host>\n");
         printf("\t--size <size>  : Size of the chunk to send is <size>, default %d\n",
                         DEFAULT_CHUNK_SIZE);
         printf("\t--count <cnt>  : Send <cnt> chunks, default is %d\n",
@@ -261,6 +264,7 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                 { "echo", 0,0,'e' },
                 { "instreams", 1,0, 'I' },
                 { "outstreams", 1,0,'O' },
+                { "lhost",1,0,'l'},
                 { "lport",1,0,'L'},
                 { "auth-key",1,0,'A'},
                 { "auth-hmac",1,0,'M'},
@@ -324,6 +328,9 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
                                 strncpy( ctx->filename, optarg, FILENAME_LEN );
                                 ctx->filename[FILENAME_LEN-1] = '\0';
                                 break;
+                        case 'l' :
+								ctx->lhost = optarg;
+                                break;
                         case 'L' :
                                 if (parse_uint16(optarg, &ctx->lport) < 0) {
                                         fprintf(stderr,"Malformed local port number given\n");
@@ -366,7 +373,7 @@ static int parse_args( int argc, char **argv, struct client_ctx *ctx )
  * @param port Local port to bind the socket into.
  * @return 0 if the socket was bound succesfully, -1 if not.
  */
-static int bind_to_local_port( int domain, int sock, uint16_t port)
+static int bind_to_local( int domain, int sock, struct client_ctx *ctx)
 {
         socklen_t salen; 
         struct sockaddr_storage ss;
@@ -378,14 +385,14 @@ static int bind_to_local_port( int domain, int sock, uint16_t port)
                 struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
                 salen = sizeof(struct sockaddr_in);
                 sin->sin_family = AF_INET;
-                sin->sin_port = htons(port);
-                sin->sin_addr.s_addr = htonl(INADDR_ANY);
+                sin->sin_port = htons(ctx->lport);
+                sin->sin_addr.s_addr = inet_addr(ctx->lhost);
         } else if (domain == PF_INET6) {
                 struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
                 salen =  sizeof(struct sockaddr_in6);
                 sin6->sin6_family = AF_INET6;
-                sin6->sin6_port = htons(port);
-                memcpy(&sin6->sin6_addr, &in6addr_any, sizeof(in6addr_any)); 
+                sin6->sin6_port = htons(ctx->lport);
+                inet_pton(AF_INET, ctx->lhost, (void *)&sin6->sin6_addr);
         } else {
                 WARN("Invalid domain %d\n", domain);
                 return -1;
@@ -432,9 +439,9 @@ int main( int argc, char *argv[] )
         }
         if (common_init(&ctx.common) != 0)
                 goto out;
-
-        if (ctx.lport != 0 ) {
-                if (bind_to_local_port(domain, ctx.common.sock, ctx.lport) != 0 ) {
+		
+        if (ctx.lport != 0 || ctx.lhost != NULL) {
+                if (bind_to_local(domain, ctx.common.sock, &ctx) != 0 ) {
                         close(ctx.common.sock);
                         return EXIT_FAILURE;
                 }
